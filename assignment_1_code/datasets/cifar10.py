@@ -1,6 +1,8 @@
 import pickle
+import os
 from typing import Tuple
 import numpy as np
+from assignment_1_code.datasets.dataset import Subset, ClassificationDataset
 
 
 from assignment_1_code.datasets.dataset import Subset, ClassificationDataset
@@ -52,17 +54,48 @@ class CIFAR10Dataset(ClassificationDataset):
         Labels should be returned either as a Python list of ints or as a
         numpy array with dtype int64.
         """
-
-        # TODO implement
-        # See the CIFAR-10 website on how to load the data files
-        pass
+        if not os.path.isdir(self.fdir):
+            raise ValueError(f"{self.fdir} is not a directory")
+        
+        if self.subset == Subset.TRAINING:
+            batch_files = [f"data_batch_{i}" for i in range(1, 5)]  # batches 1-4
+        elif self.subset == Subset.VALIDATION:
+            batch_files = ["data_batch_5"]  # batch 5
+        elif self.subset == Subset.TEST:
+            batch_files = ["test_batch"]
+        else:
+            raise ValueError(f"Unknown subset: {self.subset}")
+        
+        images_list = []
+        labels_list = []
+        
+        for batch_file in batch_files:
+            file_path = os.path.join(self.fdir, batch_file)
+            if not os.path.isfile(file_path):
+                raise ValueError(f"Missing file: {file_path}")
+            
+            with open(file_path, 'rb') as f:
+                batch_data = pickle.load(f, encoding='bytes')
+            
+            images_list.append(batch_data[b'data']) # pixel values
+            labels_list.extend(batch_data[b'labels']) # class numbers 0-9
+        
+        images = np.concatenate(images_list, axis=0) # stack batches
+        labels = np.array(labels_list, dtype=np.int64)
+        
+        # reshape images - (N, 3072) -> (N, 32, 32, 3) in RGB order
+        images = images.reshape(-1, 3, 32, 32)
+        images = images.transpose(0, 2, 3, 1)  # -> (N, 32, 32, 3) RGB
+        images = images.astype(np.uint8)
+        
+        return images, labels
+        
 
     def __len__(self) -> int:
         """
         Returns the number of samples in the dataset.
         """
-        # TODO implement
-        pass
+        return len(self.images)
 
     def __getitem__(self, idx: int) -> Tuple:
         """
@@ -71,12 +104,19 @@ class CIFAR10Dataset(ClassificationDataset):
         Applies transforms if not None.
         Raises IndexError if the index is out of bounds.
         """
-        # TODO implement
-        pass
+        if idx < 0 or idx >= len(self):
+            raise IndexError(f"Index {idx} out of bounds for dataset of size {len(self)}")
+        
+        image = self.images[idx] # one image
+        label = self.labels[idx] # one label
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, label
 
     def num_classes(self) -> int:
         """
         Returns the number of classes.
         """
-        # TODO implement
-        pass
+        return len(self.classes)

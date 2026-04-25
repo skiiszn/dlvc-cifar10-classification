@@ -5,6 +5,7 @@ import torch
 import torchvision.transforms.v2 as v2
 from pathlib import Path
 import os
+from assignment_1_code.datasets.dataset import Subset
 
 from assignment_1_code.models.class_model import (
     DeepClassifier,
@@ -39,9 +40,11 @@ def train(args):
         ]
     )
 
-    # Use config.py for all machine-dependent paths, e.g. DATA_DIR.
-    train_data = CIFAR10Dataset(DATA_DIR, ...)
-    val_data = ...
+    # Training data: batches 1-4
+    train_data = CIFAR10Dataset(DATA_DIR, subset=Subset.TRAINING, transform=train_transform)
+
+    # Validation data: batch 5
+    val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
     device = ...
 
