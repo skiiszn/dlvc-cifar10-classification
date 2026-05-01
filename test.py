@@ -24,15 +24,16 @@ def test(args):
     )
 
     # Use config.py for machine-dependent paths, e.g. DATA_DIR and MODEL_SAVE_DIR.
-    test_data = CIFAR10Dataset(DATA_DIR, ...)
+    test_data = CIFAR10Dataset(DATA_DIR, subset=Subset.TEST, transform=transform)
     test_data_loader = ...
 
-    device = ...
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_test_data = len(test_data)
 
-    model = DeepClassifier(...)
+    model = DeepClassifier(resnet18(num_classes=10))
     model.load(args.path_to_trained_model)
     model.to(device)
+    #model.eval()
 
     loss_fn = torch.nn.CrossEntropyLoss()
 

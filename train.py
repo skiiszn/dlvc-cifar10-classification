@@ -40,8 +40,10 @@ def train(args):
     )
 
     # Use config.py for all machine-dependent paths, e.g. DATA_DIR.
-    train_data = CIFAR10Dataset(DATA_DIR, ...)
-    val_data = ...
+    train_data = CIFAR10Dataset(DATA_DIR, subset=Subset.TRAINING, transform=train_transform)
+
+    # Validation data: batch 5
+    val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
     device = ...
 
