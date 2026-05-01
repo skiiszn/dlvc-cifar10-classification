@@ -15,6 +15,8 @@ from assignment_1_code.datasets.cifar10 import CIFAR10Dataset
 from assignment_1_code.datasets.dataset import Subset
 from config import DATA_DIR, MODEL_SAVE_DIR
 
+from torchvision.models import resnet18
+
 
 def train(args):
 
@@ -45,11 +47,11 @@ def train(args):
     # Validation data: batch 5
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
-    device = ...
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = DeepClassifier(...)
+    model = DeepClassifier(resnet18(num_classes=10))
     model.to(device)
-    optimizer = ...
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, amsgrad=True)
     loss_fn = torch.nn.CrossEntropyLoss()
 
     train_metric = Accuracy(classes=train_data.classes)
@@ -57,9 +59,9 @@ def train(args):
     val_frequency = 5
 
     model_save_dir = Path(MODEL_SAVE_DIR)
-    model_save_dir.mkdir(exist_ok=True)
+    model_save_dir.mkdir(parents=True, exist_ok=True)
 
-    lr_scheduler = ...
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
     trainer = ImgClassificationTrainer(
         model,

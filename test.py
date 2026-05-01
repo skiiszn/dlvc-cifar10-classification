@@ -1,9 +1,11 @@
 # Feel free to change the imports according to your implementation and needs
 import argparse
+import csv
 import os
 import torch
 import torchvision.transforms.v2 as v2
 import os
+from pathlib import Path
 
 from torchvision.models import resnet18  # change to the model you want to test
 from assignment_1_code.models.class_model import DeepClassifier
@@ -11,6 +13,7 @@ from assignment_1_code.metrics import Accuracy
 from assignment_1_code.datasets.cifar10 import CIFAR10Dataset
 from assignment_1_code.datasets.dataset import Subset
 from config import DATA_DIR, MODEL_SAVE_DIR
+
 
 
 def test(args):
@@ -33,7 +36,7 @@ def test(args):
     model = DeepClassifier(resnet18(num_classes=10))
     model.load(args.path_to_trained_model)
     model.to(device)
-    #model.eval()
+    model.eval()
 
     loss_fn = torch.nn.CrossEntropyLoss()
 
@@ -42,6 +45,55 @@ def test(args):
     # Below implement testing loop and print final loss
     # and metrics to terminal after testing is finished
     # ...
+    test_metric.reset()
+    running_loss = 0.0
+    n_batches = 0
+
+    with torch.no_grad():
+        for images, labels in test_data_loader:
+            images = images.to(device, non_blocking=True)
+            labels = torch.as_tensor(labels, dtype=torch.long).to(
+                device, non_blocking=True
+            )
+
+            outputs = model(images)
+            loss = loss_fn(outputs, labels)
+
+            running_loss += loss.item()
+            n_batches += 1
+            test_metric.update(outputs.detach(), labels)
+
+    test_loss = running_loss / max(n_batches, 1)
+
+    print(f"test loss: {test_loss}")
+    print(test_metric)
+
+    # save results
+    results_dir = Path("results/test_data")
+    results_dir.mkdir(parents=True, exist_ok=True)
+    model_stem = Path(args.path_to_trained_model).stem
+    csv_path = results_dir / f"{model_stem}_results_test_1.csv"  # change for mutiple testing !!!
+
+    mean_pcacc = test_metric.per_class_accuracy()
+    overall_acc = test_metric.accuracy()
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["metric", "value"])
+        writer.writerow(["test_loss", test_loss])
+        writer.writerow(["accuracy", overall_acc])
+        writer.writerow(["per_class_accuracy", mean_pcacc])
+        for classname in test_data.classes:
+            writer.writerow(
+                [
+                    f"accuracy_{classname}",
+                    test_metric.per_class_accuracies.get(classname, 0.0),
+                ]
+            )
+
+    print(f"\nResults saved to {csv_path}")
+
+
 
 
 if __name__ == "__main__":
