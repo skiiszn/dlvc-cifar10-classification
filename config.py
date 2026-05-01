@@ -14,3 +14,6 @@ LOG_DIR = Path("data/logs")
 
 # Directory where trained model checkpoints are stored
 MODEL_SAVE_DIR = Path("data/checkpoints")
+
+# Directory where visualization outputs are stored
+VIZ_DIR = Path("results/viz")
