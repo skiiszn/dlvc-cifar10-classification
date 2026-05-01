@@ -15,8 +15,8 @@ class WandBLogger:
 
         if self.enabled:
             wandb.init(entity="your entity",
-                        project="your project",
-                        group="your run group")
+                        project="dlvc-assignment-1",
+                        group="20")
             if run_name is None:
                 wandb.run.name = wandb.run.id    
             else:
