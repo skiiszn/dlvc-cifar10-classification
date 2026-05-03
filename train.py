@@ -48,6 +48,7 @@ def train(args):
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     model = DeepClassifier(resnet18(num_classes=10))
     model.to(device)
@@ -75,23 +76,27 @@ def train(args):
         device,
         args.num_epochs,
         model_save_dir,
-        batch_size=128,  # feel free to change
+        batch_size=args.batch_size,  # feel free to change
         val_frequency=val_frequency,
     )
     trainer.train()
 
 
 if __name__ == "__main__":
-    # Feel free to change this part - you do not have to use this argparse and gpu handling
     args = argparse.ArgumentParser(description="Training")
     args.add_argument(
         "-d", "--gpu_id", default="0", type=str, help="index of which GPU to use"
+    )
+    args.add_argument(
+        "--num_epochs", default=30, type=int, help="number of epochs"
+    )
+    args.add_argument(
+        "--batch_size", default=128, type=int, help="batch size"
     )
 
     if not isinstance(args, tuple):
         args = args.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.gpu_id = 0
-    args.num_epochs = 30
 
     train(args)
