@@ -59,7 +59,7 @@ def train(args):
     val_metric = Accuracy(classes=val_data.classes)
     val_frequency = 5
 
-    model_save_dir = Path(MODEL_SAVE_DIR)
+    model_save_dir = Path(MODEL_SAVE_DIR) / "resnet18"
     model_save_dir.mkdir(parents=True, exist_ok=True)
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
