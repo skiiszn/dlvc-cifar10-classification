@@ -395,8 +395,6 @@ if __name__ == "__main__":
             "'scheduler' = sweep schedulers (Exponential, Step, Cosine) on "
             "baseline settings with reference optimizer; "
             "'all' = aug_reg + optimizer + scheduler, deduplicated; "
-            "'single' = one specific configuration controlled by --combo, "
-            "--optimizer and --scheduler."
         ),
     )
     parser.add_argument(
