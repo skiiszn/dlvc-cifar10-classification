@@ -401,7 +401,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_epochs",
-        default=3, #30
+        default=30, #30
         type=int,
         help="number of epochs per configuration (default: 30)",
     )
