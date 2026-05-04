@@ -237,7 +237,7 @@ def train(
 
 
 
-    tag = config_tag(
+    tag = "ResNet18_" + config_tag(
         use_augmentation, use_regularization, optimizer_name, scheduler_name
     )
     print(
