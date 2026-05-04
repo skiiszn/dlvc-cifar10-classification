@@ -77,6 +77,7 @@ SCHEDULER_FACTORIES = {
 
 
 
+
 # Short abbreviations used inside config tags / save folder names so paths
 _OPT_ABBREV = {"adamw": "adamw", "adam": "adam", "sgd": "sgd"}
 _SCHED_ABBREV = {"exponential": "exp", "step": "step", "cosine": "cos"}
@@ -97,6 +98,10 @@ def config_tag(
     aug = "aug" if use_augmentation else "noaug"
     reg = "reg" if use_regularization else "noreg"
     return f"{aug}_{reg}_{_OPT_ABBREV[optimizer_name]}_{_SCHED_ABBREV[scheduler_name]}"
+
+
+
+
 
 
 
@@ -185,14 +190,12 @@ def build_train_transform(use_augmentation: bool) -> v2.Compose:
     """
     Build the training-time transform pipeline.
 
-    With ``use_augmentation=True`` we add the two augmentations explicitly
-    required by instructions.md (Part 5):
+    With ``use_augmentation=True`` we add the two augmentations:
         * RandomCrop(32, padding=4)         -- random crops
         * RandomHorizontalFlip(p=0.5)       -- left/right mirroring
 
     With ``use_augmentation=False`` only the deterministic preprocessing is
-    applied (type-cast to float32 in [0, 1] + ImageNet normalization), which
-    matches the validation/test pipeline.
+    applied (type-cast to float32 in [0, 1] + ImageNet normalization)
     """
     transforms = [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
     if use_augmentation:
@@ -232,10 +235,7 @@ def train(
     scheduler_name: str = "exponential",
 ) -> None:
 
-    # Implement this function so that it trains a specific model as described in the instruction.md file
-    # feel free to change the code snippets given here, they are just to give you an initial structure
-    # but do not have to be used if you want to do it differently
-    # For device handling you can take a look at pytorch documentation
+
 
     tag = config_tag(
         use_augmentation, use_regularization, optimizer_name, scheduler_name
@@ -256,8 +256,8 @@ def train(
     # Validation data: batch 5
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # Apple mac
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #
+    #device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # Apple macos
     print(f"Using device: {device}")
 
 
@@ -276,7 +276,6 @@ def train(
         f"(lr={optimizer.param_groups[0]['lr']}, "
         f"weight_decay={optimizer.param_groups[0]['weight_decay']})"
     )
-
 
 
 
@@ -318,8 +317,7 @@ def train(
 
 def aug_reg_pipeline_configs():
     """
-    The (aug x reg) 4-combo pipeline with the reference optimizer + scheduler
-    (AdamW + ExponentialLR). This is the experiment from the previous task.
+    The (aug x reg) 4-combo pipeline with the optimizer=AdamW + scheduler=ExponentialLR.
     """
     return [
         (False, False, "adamw", "exponential"),  # baseline
@@ -331,9 +329,9 @@ def aug_reg_pipeline_configs():
 
 def optimizer_sweep_configs():
     """
-    Sweep over optimizers, holding everything else at the baseline:
+    Changes optimizers, holding everything else at the baseline:
     no augmentation, no regularization (weight_decay=0), reference scheduler
-    (ExponentialLR with gamma=0.9). This isolates the optimizer's effect.
+    (ExponentialLR with gamma=0.9).
     """
     return [
         (False, False, opt_name, "exponential")
@@ -343,9 +341,9 @@ def optimizer_sweep_configs():
 
 def scheduler_sweep_configs():
     """
-    Sweep over LR schedulers, holding everything else at the baseline:
+    Changes LR schedulers, holding everything else at the baseline:
     no augmentation, no regularization, reference optimizer (AdamW with
-    lr=1e-3, amsgrad=True). This isolates the scheduler's effect.
+    lr=1e-3, amsgrad=True).
     """
     return [
         (False, False, "adamw", sched_name)
@@ -356,8 +354,6 @@ def scheduler_sweep_configs():
 def run_configs(args, configs) -> None:
     """
     Run each unique (use_aug, use_reg, optimizer, scheduler) tuple once.
-    Order is preserved; duplicates (e.g. the baseline AdamW+Exp config that
-    sits in all three sweep lists) are run only the first time they appear.
     """
     seen = set()
     for cfg in configs:
@@ -371,20 +367,13 @@ def run_configs(args, configs) -> None:
 
 if __name__ == "__main__":
 
-    # Feel free to change this part - you do not have to use this argparse and gpu handling
-    #args = argparse.ArgumentParser(description="Training")
-    #args.add_argument(
-    #    "-d", "--gpu_id", default="0", type=str, help="index of which GPU to use"
-    #)
-    # if not isinstance(args, tuple):
-    #    args = args.parse_args()
     parser = argparse.ArgumentParser(description="Training")
     parser.add_argument(
         "-d", "--gpu_id", default="0", type=str, help="index of which GPU to use"
     )
     parser.add_argument(
         "--mode",
-        choices=["aug_reg", "optimizer", "scheduler", "all", "single"],
+        choices=["aug_reg", "optimizer", "scheduler", "all"],
         default="aug_reg",
         help=(
             "Which experiment to run: "
@@ -399,7 +388,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_epochs",
-        default=30, #30
+        default=30, #test:3
         type=int,
         help="number of epochs per configuration (default: 30)",
     )
@@ -409,7 +398,7 @@ if __name__ == "__main__":
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.gpu_id = 0
-    #args.num_epochs = 2 #30 #epochs
+
 
     if args.mode == "aug_reg":
         run_configs(args, aug_reg_pipeline_configs())
@@ -425,4 +414,4 @@ if __name__ == "__main__":
             + scheduler_sweep_configs(),
         )
 
-    #train(args)
+
