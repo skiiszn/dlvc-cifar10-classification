@@ -262,6 +262,7 @@ def train(
 
 
 
+
     model = DeepClassifier(resnet18(num_classes=10))
     model.to(device)
 
