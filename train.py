@@ -387,7 +387,10 @@ if __name__ == "__main__":
         "--num_epochs",
         default=30, #test:3
         type=int,
-        help="number of epochs per configuration (default: 30)",
+        help="number of epochs",
+    )
+    parser.add_argument(
+        "--batch_size", default=128, type=int, help="batch size"
     )
     args = parser.parse_args()
 
