@@ -10,9 +10,6 @@
 """
 Vision Transformer for CIFAR-10 classification.
 
-================================================================================
-Source attribution
-================================================================================
 The transformer machinery used below comes from the lucidrains/vit-pytorch
 package, specifically the ``SimpleViT`` variant.
 
@@ -21,7 +18,6 @@ package, specifically the ``SimpleViT`` variant.
     Paper:      Beyer, L., Zhai, X., & Kolesnikov, A. (2022).
                 "Better plain ViT baselines for ImageNet-1k."
                 https://arxiv.org/abs/2205.01580
-    License:    MIT
 
 Compared to the canonical ViT (Dosovitskiy et al. 2021), ``SimpleViT`` makes
 three small changes that empirically improve from-scratch training on small
@@ -30,46 +26,6 @@ datasets -- exactly our setup (no pretraining, ~30 epochs, CIFAR-10):
     1. Fixed 2-D sin-cos positional embedding (instead of a learnable one)
     2. Mean pooling over patch tokens (instead of a [CLS] token)
     3. No dropout
-
-================================================================================
-Where the key ViT concepts live (for the report)
-================================================================================
-The four defining concepts of a Vision Transformer are all visible in
-``vit_pytorch/simple_vit.py`` (file you can install via ``pip install
-vit-pytorch`` and inspect locally):
-
-    (a) PATCH EMBEDDING
-        The input image is split into non-overlapping patches and each patch
-        is linearly projected to a token embedding.
-        See ``SimpleViT.__init__``: the ``self.to_patch_embedding`` block
-        with ``Rearrange("b c (h p1) (w p2) -> b (h w) (p1 p2 c)")`` followed
-        by ``LayerNorm + Linear(patch_dim, dim) + LayerNorm``.
-
-    (b) POSITIONAL ENCODING
-        Patches have no inherent order, so we add a position embedding to
-        every token. SimpleViT uses fixed 2-D sin-cos embeddings.
-        See ``posemb_sincos_2d`` in simple_vit.py and the call site in
-        ``SimpleViT.forward`` where it is added to ``x``.
-
-    (c) MULTI-HEAD SELF-ATTENTION
-        The core of the transformer encoder: each token attends to every
-        other token via scaled dot-product attention, run in parallel across
-        multiple heads.
-        See the ``Attention`` class (``q, k, v = ...``;
-        ``attn = (q @ k.transpose(-1, -2)) * scale``;
-        ``attn.softmax(dim=-1)``; ``out = attn @ v``) and the ``Transformer``
-        class which stacks ``Attention + FeedForward`` blocks.
-
-    (d) CLASSIFICATION HEAD
-        After the encoder, tokens are mean-pooled into a single vector and
-        passed through a linear classifier.
-        See the last lines of ``SimpleViT.forward``:
-        ``x = x.mean(dim=1); x = self.to_latent(x); return self.linear_head(x)``.
-
-================================================================================
-Required dependency
-================================================================================
-    pip install vit-pytorch
 """
 
 import torch
