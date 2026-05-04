@@ -28,7 +28,9 @@ def test(args):
 
     # Use config.py for machine-dependent paths, e.g. DATA_DIR and MODEL_SAVE_DIR.
     test_data = CIFAR10Dataset(DATA_DIR, subset=Subset.TEST, transform=transform)
-    test_data_loader = ...
+    test_data_loader = torch.utils.data.DataLoader(
+    test_data, batch_size=args.batch_size, shuffle=False, num_workers=2
+)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_test_data = len(test_data)
@@ -72,7 +74,7 @@ def test(args):
     results_dir = Path("results/test_data")
     results_dir.mkdir(parents=True, exist_ok=True)
     model_stem = Path(args.path_to_trained_model).stem
-    csv_path = results_dir / f"{model_stem}_results_test_1.csv"  # change for mutiple testing !!!
+    csv_path = results_dir / f"ResNet18_{model_stem}_test_results.csv"  # change for mutiple testing !!!
 
     mean_pcacc = test_metric.per_class_accuracy()
     overall_acc = test_metric.accuracy()
@@ -102,11 +104,12 @@ if __name__ == "__main__":
     args.add_argument(
         "-d", "--gpu_id", default="5", type=str, help="index of which GPU to use"
     )
+    args.add_argument("--batch_size", default=128, type=int, help="batch size")
 
     if not isinstance(args, tuple):
         args = args.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.gpu_id = 0
-    args.path_to_trained_model = str(MODEL_SAVE_DIR / "ResNet_model_best.pth")
+    args.path_to_trained_model = str(MODEL_SAVE_DIR / "resnet18" / "best_model_best.pth")
 
     test(args)
