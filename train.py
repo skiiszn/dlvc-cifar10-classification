@@ -256,12 +256,8 @@ def train(
     # Validation data: batch 5
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #
-    #device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # Apple macos
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-
-
-
 
     model = DeepClassifier(resnet18(num_classes=10))
     model.to(device)
@@ -308,7 +304,7 @@ def train(
         device,
         args.num_epochs,
         model_save_dir,
-        batch_size=128,  # feel free to change
+        batch_size=args.batch_size,  # feel free to change
         val_frequency=val_frequency,
     )
     trainer.train()
