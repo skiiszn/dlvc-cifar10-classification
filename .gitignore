@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Dataset
+cifar-10-batches-py/
+cifar-10-python.tar.gz
+data/
+
+# Models and Checkpoints
+*.pth
+*.pt
+checkpoints/
+saved_models/
+
+# Logs
+logs/
+wandb/
+*.log
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
