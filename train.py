@@ -286,8 +286,7 @@ def train(
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
 
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")  # macOS
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     model = DeepClassifier(resnet18(num_classes=10))
@@ -312,7 +311,7 @@ def train(
     val_metric = Accuracy(classes=val_data.classes)
     val_frequency = 5
 
-    model_save_dir = Path(MODEL_SAVE_DIR) / tag
+    model_save_dir = Path(MODEL_SAVE_DIR) / tag         # maybe needs additional path; be aware!!!!
     model_save_dir.mkdir(parents=True, exist_ok=True)
 
     # different learning rate schedulers
@@ -397,8 +396,8 @@ def early_stopping_configs():
     Compares early stopping ON vs OFF on baseline settings.
     """
     return [
-        (False, False, "adamw", "exponential", True),   # with early stopping
-        (False, False, "adamw", "exponential", False),    # no early stopping
+        (False, False, "adamw", "exponential", False),   # no early stopping
+        (False, False, "adamw", "exponential", True),    # with early stopping
     ]
 
 
@@ -442,14 +441,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--early_stopping", action="store_true",
         help=(
-            "When set, each config in aug_reg / optimizer / scheduler modes "
-            "is also run with early stopping enabled. "
-            "Has no effect when --mode=early_stopping, which always runs both."
+            "early_stopping (default: False)"
         ),
     )
     parser.add_argument(
         "--num_epochs", default=30, type=int,
-        help="max number of epochs",
+        help="number of epochs",
     )
     parser.add_argument(
         "--batch_size", default=128, type=int,
