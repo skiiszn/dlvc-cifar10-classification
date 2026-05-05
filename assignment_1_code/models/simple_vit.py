@@ -9,7 +9,7 @@ from einops.layers.torch import Rearrange
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
 
-def posemb_sincos_2d(h, w, dim, temperature: int = 10000, dtype = torch.float32):
+def posemb_sincos_2d(h, w, dim, temperature: int = 10000, dtype = torch.float32): # positional encoding: posemb_sincos_2d def
     y, x = torch.meshgrid(torch.arange(h), torch.arange(w), indexing="ij")
     assert (dim % 4) == 0, "feature dimension must be multiple of 4 for sincos emb"
     omega = torch.arange(dim // 4) / (dim // 4 - 1)
@@ -34,7 +34,7 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-class Attention(nn.Module):
+class Attention(nn.Module): # self-attention: Attention class
     def __init__(self, dim, heads = 8, dim_head = 64):
         super().__init__()
         inner_dim = dim_head *  heads
@@ -51,13 +51,13 @@ class Attention(nn.Module):
         x = self.norm(x)
 
         qkv = self.to_qkv(x).chunk(3, dim = -1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv) # self-attention
 
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale # self-attention
 
         attn = self.attend(dots)
 
-        out = torch.matmul(attn, v)
+        out = torch.matmul(attn, v) # self-attention
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
@@ -87,14 +87,14 @@ class SimpleViT(nn.Module):
 
         patch_dim = channels * patch_height * patch_width
 
-        self.to_patch_embedding = nn.Sequential(
+        self.to_patch_embedding = nn.Sequential( # patch embedding
             Rearrange("b c (h p1) (w p2) -> b (h w) (p1 p2 c)", p1 = patch_height, p2 = patch_width),
             nn.LayerNorm(patch_dim),
             nn.Linear(patch_dim, dim),
             nn.LayerNorm(dim),
         )
 
-        self.pos_embedding = posemb_sincos_2d(
+        self.pos_embedding = posemb_sincos_2d( # positional encoding: instantiation
             h = image_height // patch_height,
             w = image_width // patch_width,
             dim = dim,
@@ -105,16 +105,16 @@ class SimpleViT(nn.Module):
         self.pool = "mean"
         self.to_latent = nn.Identity()
 
-        self.linear_head = nn.Linear(dim, num_classes)
+        self.linear_head = nn.Linear(dim, num_classes) # classification head: linear_head def
 
     def forward(self, img):
         device = img.device
 
-        x = self.to_patch_embedding(img)
-        x += self.pos_embedding.to(device, dtype=x.dtype)
+        x = self.to_patch_embedding(img) # patch embedding
+        x += self.pos_embedding.to(device, dtype=x.dtype) # positional encoding: added to tokens
 
         x = self.transformer(x)
-        x = x.mean(dim = 1)
+        x = x.mean(dim = 1) # classification head: mean pool
 
         x = self.to_latent(x)
-        return self.linear_head(x)
+        return self.linear_head(x) # classification head: linear -> logits
