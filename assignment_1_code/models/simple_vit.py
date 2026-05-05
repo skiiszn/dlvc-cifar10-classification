@@ -51,11 +51,11 @@ class Attention(nn.Module): # self-attention: Attention class
         x = self.norm(x)
 
         qkv = self.to_qkv(x).chunk(3, dim = -1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv) # self-attention
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv) # self-attention: reshaped
 
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale # self-attention
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale # self-attention: scaled
 
-        attn = self.attend(dots)
+        attn = self.attend(dots) # self-attention: softmax
 
         out = torch.matmul(attn, v) # self-attention
         out = rearrange(out, 'b h n d -> b n (h d)')
