@@ -1,34 +1,4 @@
 # Feel free to change the imports according to your implementation and needs
-"""
-Training entrypoint for the Vision Transformer (SimpleViT) on CIFAR-10.
-
-Mirrors the structure of ``train.py`` (data-augmentation / regularization
-pipeline + optimizer & scheduler sweeps) but with hyperparameters tuned
-for ViT-from-scratch on CIFAR-10:
-
-    * lower learning rate    -- AdamW lr=3e-4 instead of 1e-3
-    * higher weight decay    -- 0.05 instead of 5e-4 (standard ViT recipe)
-    * default scheduler      -- CosineAnnealingLR (literature consensus
-                                for ViT) instead of ExponentialLR
-
-CLI usage examples:
-
-    # default 4-combo aug/reg pipeline (~2h on a modern GPU at 30 epochs)
-    python train_vit.py
-
-    # only the optimizer sweep on the baseline (no aug, no reg)
-    python train_vit.py --mode optimizer
-
-    # only the scheduler sweep on the baseline
-    python train_vit.py --mode scheduler
-
-    # everything (aug/reg + optimizer + scheduler), deduplicated
-    python train_vit.py --mode all
-
-    # one specific run
-    python train_vit.py --mode single --combo both --optimizer adamw --scheduler cosine
-"""
-
 import argparse
 import csv
 import os
@@ -58,11 +28,9 @@ WEIGHT_DECAY_OFF = 0.0
 
 
 # Optimizer
-#   * AdamW: lr=1e-3, amsgrad=True               (the reference recipe)
-#   * Adam : lr=1e-3                             (same lr -> isolates the
-#                                                 AdamW-vs-Adam difference)
-#   * SGD  : lr=1e-2, momentum=0.9               (SGD typically needs a ~10x
-#                                                 larger lr than Adam-style
+#   * AdamW: lr=1e-3, amsgrad=True               (reference)
+#   * Adam : lr=1e-3                             (same lr -> isolates the AdamW-vs-Adam difference)
+#   * SGD  : lr=1e-2, momentum=0.9               (SGD typically needs a ~10x larger lr than Adam-style methods)
 #
 OPTIMIZER_FACTORIES = {
     "adamw": lambda params, wd: torch.optim.AdamW(
@@ -79,12 +47,10 @@ OPTIMIZER_FACTORIES = {
 
 
 # LR scheduler
-#   * exponential: gamma=0.9                 (the reference recipe; lr decays
-#                                             smoothly each epoch)
-#   * step       : step_size=10, gamma=0.1   (with 30 epochs total this gives
-#                                             drops at epochs 10 and 20)
-#   * cosine     : T_max=num_epochs          (one full cosine half-cycle from
-#                                             lr to 0 over the run)
+#   * cosine     : T_max=num_epochs               (default for ViT; one full cosine half-cycle from lr to 0 over the whole run)
+#   * exponential: gamma=0.9                      (kept for parity with the ResNet pipeline)
+#   * step       : step_size=10, gamma=0.1        (with 30 epochs total this gives drops at epochs 10 and 20)
+#
 SCHEDULER_FACTORIES = {
     "exponential": lambda opt, n: torch.optim.lr_scheduler.ExponentialLR(
         opt, gamma=0.9
@@ -118,8 +84,6 @@ def config_tag(
 ) -> str:
     """
     Short identifier for a (aug, reg, optimizer, scheduler) configuration.
-    Used as the sub-folder name under MODEL_SAVE_DIR so the pipeline
-    runs do not overwrite each other's checkpoints.
     """
     aug = "aug" if use_augmentation else "noaug"
     reg = "reg" if use_regularization else "noreg"
@@ -286,8 +250,7 @@ def train(
     # Validation data: batch 5
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # macOS
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # Model: ViT defaults: image_size=32, patch_size=4, dim=256, depth=6, heads=8, mlp_dim=512
@@ -401,7 +364,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_epochs",
-        default=30, #30,
+        default=30,
         type=int,
         help="Number of epochs",
     )
