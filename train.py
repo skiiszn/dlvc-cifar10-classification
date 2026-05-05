@@ -21,14 +21,16 @@ from config import DATA_DIR, MODEL_SAVE_DIR
 from torchvision.models import resnet18
 
 
-
 # ImageNet normalization stats
 NORM_MEAN = [0.485, 0.456, 0.406]
-NORM_STD = [0.229, 0.224, 0.225]
+NORM_STD  = [0.229, 0.224, 0.225]
 
 # Weight-decay value used when regularization is enabled
-WEIGHT_DECAY_ON = 5e-4
+WEIGHT_DECAY_ON  = 5e-4
 WEIGHT_DECAY_OFF = 0.0
+
+# Early-stopping patience
+EARLY_STOPPING_PATIENCE = 2
 
 
 # Optimizer
@@ -37,7 +39,6 @@ WEIGHT_DECAY_OFF = 0.0
 #                                                 AdamW-vs-Adam difference)
 #   * SGD  : lr=1e-2, momentum=0.9               (SGD typically needs a ~10x
 #                                                 larger lr than Adam-style
-#
 OPTIMIZER_FACTORIES = {
     "adamw": lambda params, wd: torch.optim.AdamW(
         params, lr=1e-3, amsgrad=True, weight_decay=wd
@@ -50,15 +51,12 @@ OPTIMIZER_FACTORIES = {
     ),
 }
 
-
-
 # LR scheduler
 #   * exponential: gamma=0.9                 (the reference recipe; lr decays
 #                                             smoothly each epoch)
 #   * step       : step_size=10, gamma=0.1   (with 30 epochs total this gives
 #                                             drops at epochs 10 and 20)
 #   * cosine     : T_max=num_epochs          (one full cosine half-cycle from
-#                                             lr to 0 over the run)
 SCHEDULER_FACTORIES = {
     "exponential": lambda opt, n: torch.optim.lr_scheduler.ExponentialLR(
         opt, gamma=0.9
@@ -72,32 +70,28 @@ SCHEDULER_FACTORIES = {
 }
 
 
-
-
-
-
-
-
-# Short abbreviations used inside config tags / save folder names so paths
-_OPT_ABBREV = {"adamw": "adamw", "adam": "adam", "sgd": "sgd"}
+# Short abbreviations used inside config tags / save folder names
+_OPT_ABBREV   = {"adamw": "adamw", "adam": "adam", "sgd": "sgd"}
 _SCHED_ABBREV = {"exponential": "exp", "step": "step", "cosine": "cos"}
 
 
-
 def config_tag(
-    use_augmentation: bool,
-    use_regularization: bool,
-    optimizer_name: str,
-    scheduler_name: str,
+    use_augmentation:    bool,
+    use_regularization:  bool,
+    optimizer_name:      str,
+    scheduler_name:      str,
+    use_early_stopping:  bool,
 ) -> str:
     """
-    Short identifier for a (aug, reg, optimizer, scheduler) configuration.
-    Used as the sub-folder name under MODEL_SAVE_DIR so the pipeline
-    runs do not overwrite each other's checkpoints.
+    Short identifier for one (aug, reg, optimizer, scheduler, es) configuration.
+    Used as the sub-folder name under MODEL_SAVE_DIR so pipeline runs do not
+    overwrite each other's checkpoints.
     """
-    aug = "aug" if use_augmentation else "noaug"
-    reg = "reg" if use_regularization else "noreg"
-    return f"{aug}_{reg}_{_OPT_ABBREV[optimizer_name]}_{_SCHED_ABBREV[scheduler_name]}"
+    aug  = "aug"  if use_augmentation   else "noaug"
+    reg  = "reg"  if use_regularization else "noreg"
+    es   = "es"   if use_early_stopping else "noes"
+    return f"{aug}_{reg}_{_OPT_ABBREV[optimizer_name]}_{_SCHED_ABBREV[scheduler_name]}_{es}"
+
 
 
 
@@ -111,12 +105,20 @@ class HistoryTrackingTrainer(ImgClassificationTrainer):
     mPCAcc) tuple returned by ``_train_epoch`` / ``_val_epoch``.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, use_early_stopping: bool = False,
+                 patience: int = EARLY_STOPPING_PATIENCE, **kwargs):
         super().__init__(*args, **kwargs)
         self.train_history = {"epoch": [], "loss": [], "mAcc": [], "mPCAcc": []}
-        self.val_history = {"epoch": [], "loss": [], "mAcc": [], "mPCAcc": []}
+        self.val_history   = {"epoch": [], "loss": [], "mAcc": [], "mPCAcc": []}
+        # Early-stopping state
+        self.use_early_stopping = use_early_stopping
+        self.patience           = patience
+        self._es_counter        = 0          # consecutive val checks w/o improvement
+        self._es_best_mPCAcc    = -1.0       # best val mPCAcc seen so far
+        self.stopped_early      = False      # flag readable after training
 
-    def _train_epoch(self, epoch_idx):
+
+    def _train_epoch(self, epoch_idx: int):
         loss, mAcc, mPCAcc = super()._train_epoch(epoch_idx)
         self.train_history["epoch"].append(epoch_idx)
         self.train_history["loss"].append(loss)
@@ -124,7 +126,7 @@ class HistoryTrackingTrainer(ImgClassificationTrainer):
         self.train_history["mPCAcc"].append(mPCAcc)
         return loss, mAcc, mPCAcc
 
-    def _val_epoch(self, epoch_idx):
+    def _val_epoch(self, epoch_idx: int):
         loss, mAcc, mPCAcc = super()._val_epoch(epoch_idx)
         self.val_history["epoch"].append(epoch_idx)
         self.val_history["loss"].append(loss)
@@ -132,43 +134,99 @@ class HistoryTrackingTrainer(ImgClassificationTrainer):
         self.val_history["mPCAcc"].append(mPCAcc)
         return loss, mAcc, mPCAcc
 
+    def train(self) -> None:
+        """
+        Full training loop with optional early stopping.
+
+        When ``use_early_stopping=False`` (the baseline) the behaviour is
+        identical to ``ImgClassificationTrainer.train()``.
+
+        When ``use_early_stopping=True`` the loop checks val mPCAcc after
+        every validation epoch.  If it has not improved for ``patience``
+        consecutive validation checks, training is stopped and a summary
+        line is printed.
+
+        Note: the base trainer already saves the best model checkpoint
+        whenever val mPCAcc improves, so early stopping only avoids
+        unnecessary further epochs — the best model on disk is unaffected.
+        """
+        if not self.use_early_stopping:
+            # Delegate entirely to the base class — no overhead.
+            super().train()
+            return
+
+        # --- Early-stopping variant ---
+        # We re-implement the loop here rather than monkey-patching the base
+        # class so the logic stays readable and the base class is untouched.
+        best_val_mPCAcc = -1.0
+
+        for epoch_idx in range(self.num_epochs):
+            self._train_epoch(epoch_idx)
+
+            if (epoch_idx + 1) % self.val_frequency == 0:
+                _, _, val_mPCAcc = self._val_epoch(epoch_idx)
+
+                # Mirror the base-trainer checkpoint logic
+                if val_mPCAcc > best_val_mPCAcc:
+                    best_val_mPCAcc = val_mPCAcc
+                    self.model.save(self.training_save_dir)
+
+                # Early-stopping check
+                if val_mPCAcc > self._es_best_mPCAcc:
+                    self._es_best_mPCAcc = val_mPCAcc
+                    self._es_counter = 0
+                else:
+                    self._es_counter += 1
+                    print(
+                        f"[EarlyStopping] No improvement for {self._es_counter}/"
+                        f"{self.patience} validation checks "
+                        f"(best val mPCAcc: {self._es_best_mPCAcc:.4f})"
+                    )
+                    if self._es_counter >= self.patience:
+                        print(
+                            f"[EarlyStopping] Stopping at epoch {epoch_idx} — "
+                            f"no val mPCAcc improvement for {self.patience} "
+                            f"consecutive validation checks."
+                        )
+                        self.stopped_early = True
+                        break
+
+            # Step the LR scheduler once per epoch (same as base class)
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
 
 
 def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
     """
-    After a finished training run, persist the per-epoch history to csv and
+    After a finished training run, persist the per-epoch history to CSV and
     render the training-curves dashboard.
     """
-
     history_dir = Path("results") / "train_metrics_data" / tag
     history_dir.mkdir(parents=True, exist_ok=True)
     csv_path = history_dir / "history.csv"
+
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["phase", "epoch", "loss", "mAcc", "mPCAcc"])
         for i in range(len(trainer.train_history["epoch"])):
-            writer.writerow(
-                [
-                    "train",
-                    trainer.train_history["epoch"][i],
-                    trainer.train_history["loss"][i],
-                    trainer.train_history["mAcc"][i],
-                    trainer.train_history["mPCAcc"][i],
-                ]
-            )
+            writer.writerow([
+                "train",
+                trainer.train_history["epoch"][i],
+                trainer.train_history["loss"][i],
+                trainer.train_history["mAcc"][i],
+                trainer.train_history["mPCAcc"][i],
+            ])
         for i in range(len(trainer.val_history["epoch"])):
-            writer.writerow(
-                [
-                    "val",
-                    trainer.val_history["epoch"][i],
-                    trainer.val_history["loss"][i],
-                    trainer.val_history["mAcc"][i],
-                    trainer.val_history["mPCAcc"][i],
-                ]
-            )
-    print(f"Saved per-epoch metrics to {csv_path}")
+            writer.writerow([
+                "val",
+                trainer.val_history["epoch"][i],
+                trainer.val_history["loss"][i],
+                trainer.val_history["mAcc"][i],
+                trainer.val_history["mPCAcc"][i],
+            ])
 
+    print(f"Saved per-epoch metrics to {csv_path}")
 
     viz_path = Path("results") / "viz" / tag / "training_metrics_curves.png"
     fig = plot_training_curves(
@@ -190,65 +248,54 @@ def build_train_transform(use_augmentation: bool) -> v2.Compose:
     """
     Build the training-time transform pipeline.
 
-    With ``use_augmentation=True`` we add the two augmentations:
+    With ``use_augmentation=True`` we add:
         * RandomCrop(32, padding=4)         -- random crops
         * RandomHorizontalFlip(p=0.5)       -- left/right mirroring
 
     With ``use_augmentation=False`` only the deterministic preprocessing is
-    applied (type-cast to float32 in [0, 1] + ImageNet normalization)
+    applied (type-cast to float32 in [0, 1] + ImageNet normalization).
     """
     transforms = [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
     if use_augmentation:
-        transforms.extend(
-            [
-                v2.RandomCrop(size=32, padding=4),
-                v2.RandomHorizontalFlip(p=0.5),
-            ]
-        )
+        transforms.extend([
+            v2.RandomCrop(size=32, padding=4),
+            v2.RandomHorizontalFlip(p=0.5),
+        ])
     transforms.append(v2.Normalize(mean=NORM_MEAN, std=NORM_STD))
     return v2.Compose(transforms)
 
 
 def build_eval_transform() -> v2.Compose:
     """Validation/test transform: deterministic, no augmentation."""
-    return v2.Compose(
-        [
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Normalize(mean=NORM_MEAN, std=NORM_STD),
-        ]
-    )
-
-
-
-
-
-
+    return v2.Compose([
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=NORM_MEAN, std=NORM_STD),
+    ])
 
 
 
 def train(
     args,
-    use_augmentation: bool,
+    use_augmentation:   bool,
     use_regularization: bool,
-    optimizer_name: str = "adamw",
-    scheduler_name: str = "exponential",
+    optimizer_name:     str  = "adamw",
+    scheduler_name:     str  = "exponential",
+    use_early_stopping: bool = False,
 ) -> None:
 
-
-
     tag = config_tag(
-        use_augmentation, use_regularization, optimizer_name, scheduler_name
+        use_augmentation, use_regularization,
+        optimizer_name, scheduler_name, use_early_stopping,
     )
     print(
-        f"Configuration: aug={use_augmentation}, reg={use_regularization}, "
-        f"optimizer={optimizer_name}, scheduler={scheduler_name}  (tag: {tag})"
+        f"\nConfiguration: aug={use_augmentation}, reg={use_regularization}, "
+        f"optimizer={optimizer_name}, scheduler={scheduler_name}, "
+        f"early_stopping={use_early_stopping}  (tag: {tag})"
     )
 
     train_transform = build_train_transform(use_augmentation)
-    val_transform = build_eval_transform()
-
-
+    val_transform   = build_eval_transform()
 
     # Use config.py for all machine-dependent paths, e.g. DATA_DIR.
     train_data = CIFAR10Dataset(DATA_DIR, subset=Subset.TRAINING, transform=train_transform)
@@ -256,7 +303,9 @@ def train(
     # Validation data: batch 5
     val_data = CIFAR10Dataset(DATA_DIR, subset=Subset.VALIDATION, transform=val_transform)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")  # macOS
     print(f"Using device: {device}")
 
     model = DeepClassifier(resnet18(num_classes=10))
@@ -274,9 +323,8 @@ def train(
         f"weight_decay={optimizer.param_groups[0]['weight_decay']})"
     )
 
-
-
     loss_fn = torch.nn.CrossEntropyLoss()
+
 
     train_metric = Accuracy(classes=train_data.classes)
     val_metric = Accuracy(classes=val_data.classes)
@@ -285,14 +333,20 @@ def train(
     model_save_dir = Path(MODEL_SAVE_DIR) / tag
     model_save_dir.mkdir(parents=True, exist_ok=True)
 
-
     # different learning rate schedulers
     lr_scheduler = SCHEDULER_FACTORIES[scheduler_name](optimizer, args.num_epochs)
     print(f"LR scheduler: {type(lr_scheduler).__name__}")
 
+    # early stopping
+    if use_early_stopping:
+        print(
+            f"Early stopping: on  (patience={EARLY_STOPPING_PATIENCE} val checks "
+            f"= {EARLY_STOPPING_PATIENCE * val_frequency} epochs)"
+        )
+    else:
+        print("Early stopping: off")
 
-
-    trainer = HistoryTrackingTrainer( #ImgClassificationTrainer(
+    trainer = HistoryTrackingTrainer(
         model,
         optimizer,
         loss_fn,
@@ -304,53 +358,71 @@ def train(
         device,
         args.num_epochs,
         model_save_dir,
-        batch_size=args.batch_size,  # feel free to change
+        batch_size=args.batch_size,
         val_frequency=val_frequency,
+        use_early_stopping=use_early_stopping,
+        patience=EARLY_STOPPING_PATIENCE,
     )
     trainer.train()
+
+    if trainer.stopped_early:
+        print(
+            f"[EarlyStopping] Training ended at epoch "
+            f"{trainer.train_history['epoch'][-1]} out of {args.num_epochs}."
+        )
 
     _save_run_artifacts(trainer, tag)
 
 
-def aug_reg_pipeline_configs():
+
+def aug_reg_pipeline_configs(use_early_stopping: bool = False):
     """
-    The (aug x reg) 4-combo pipeline with the optimizer=AdamW + scheduler=ExponentialLR.
+    The (aug x reg) 4-combo pipeline with the reference optimizer + scheduler and early stopping off.
     """
+    es = use_early_stopping
     return [
-        (False, False, "adamw", "exponential"),  # baseline
-        (True, False, "adamw", "exponential"),  # aug only
-        (False, True, "adamw", "exponential"),  # reg only
-        (True, True, "adamw", "exponential"),  # both
+        (False, False, "adamw", "exponential", es),   # baseline
+        (True,  False, "adamw", "exponential", es),   # aug only
+        (False, True,  "adamw", "exponential", es),   # reg only
+        (True,  True,  "adamw", "exponential", es),   # both
     ]
 
 
-def optimizer_sweep_configs():
+def optimizer_change_configs(use_early_stopping: bool = False):
     """
-    Changes optimizers, holding everything else at the baseline:
-    no augmentation, no regularization (weight_decay=0), reference scheduler
-    (ExponentialLR with gamma=0.9).
+    Sweeps optimizers (AdamW, Adam, SGD) on baseline settings.
     """
+    es = use_early_stopping
     return [
-        (False, False, opt_name, "exponential")
+        (False, False, opt_name, "exponential", es)
         for opt_name in OPTIMIZER_FACTORIES.keys()
     ]
 
 
-def scheduler_sweep_configs():
+def scheduler_change_configs(use_early_stopping: bool = False):
     """
-    Changes LR schedulers, holding everything else at the baseline:
-    no augmentation, no regularization, reference optimizer (AdamW with
-    lr=1e-3, amsgrad=True).
+    Sweeps LR schedulers (Exponential, Step, Cosine) on baseline settings.
+    """
+    es = use_early_stopping
+    return [
+        (False, False, "adamw", sched_name, es)
+        for sched_name in SCHEDULER_FACTORIES.keys()
+    ]
+
+
+def early_stopping_configs():
+    """
+    Compares early stopping ON vs OFF on baseline settings.
     """
     return [
-        (False, False, "adamw", sched_name)
-        for sched_name in SCHEDULER_FACTORIES.keys()
+        (False, False, "adamw", "exponential", True),   # with early stopping
+        (False, False, "adamw", "exponential", False),    # no early stopping
     ]
 
 
 def run_configs(args, configs) -> None:
     """
-    Run each unique (use_aug, use_reg, optimizer, scheduler) tuple once.
+    Run each unique config tuple exactly once (deduplication via a set).
     """
     seen = set()
     for cfg in configs:
@@ -362,54 +434,84 @@ def run_configs(args, configs) -> None:
 
 
 
+
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Training")
     parser.add_argument(
-        "-d", "--gpu_id", default="0", type=str, help="index of which GPU to use"
+        "-d", "--gpu_id", default="0", type=str,
+        help="index of which GPU to use",
     )
     parser.add_argument(
         "--mode",
-        choices=["aug_reg", "optimizer", "scheduler", "all"],
-        default="aug_reg",
+        choices=["aug_reg", "optimizer", "scheduler", "early_stopping", "all"],
+        default="scheduler",
         help=(
-            "Which experiment to run: "
-            "'aug_reg' (default) = the 4-combo aug/reg pipeline using the "
-            "reference optimizer + scheduler (AdamW + ExponentialLR); "
-            "'optimizer' = sweep optimizers (AdamW, Adam, SGD) on baseline "
-            "settings (no aug, no reg) with reference scheduler; "
-            "'scheduler' = sweep schedulers (Exponential, Step, Cosine) on "
-            "baseline settings with reference optimizer; "
-            "'all' = aug_reg + optimizer + scheduler, deduplicated; "
+            "Which experiment to run:\n"
+            "  'aug_reg'       = 4-combo aug/reg pipeline (AdamW + ExponentialLR);\n"
+            "  'optimizer'     = change optimizers on baseline settings;\n"
+            "  'scheduler'     = change schedulers on baseline settings;\n"
+            "  'early_stopping'= compare ES-on vs ES-off on baseline settings;\n"
+            "  'all'           = all of the above, deduplicated."
         ),
     )
     parser.add_argument(
-        "--num_epochs", default=30, #test:3
-        type=int, help="number of epochs",
+        "--early_stopping", action="store_true",
+        help=(
+            "When set, each config in aug_reg / optimizer / scheduler modes "
+            "is also run with early stopping enabled. "
+            "Has no effect when --mode=early_stopping, which always runs both."
+        ),
     )
     parser.add_argument(
-        "--batch_size", default=128, type=int, help="batch size"
+        "--num_epochs", default=30, type=int,
+        help="max number of epochs",
+    )
+    parser.add_argument(
+        "--batch_size", default=128, type=int,
+        help="batch size",
     )
     args = parser.parse_args()
-
-
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.gpu_id = 0
 
+    es = args.early_stopping
 
     if args.mode == "aug_reg":
-        run_configs(args, aug_reg_pipeline_configs())
+        configs = aug_reg_pipeline_configs(use_early_stopping=False)
+        if es:
+            configs += aug_reg_pipeline_configs(use_early_stopping=True)
+        run_configs(args, configs)
+
     elif args.mode == "optimizer":
-        run_configs(args, optimizer_sweep_configs())
+        configs = optimizer_change_configs(use_early_stopping=False)
+        if es:
+            configs += optimizer_change_configs(use_early_stopping=True)
+        run_configs(args, configs)
+
     elif args.mode == "scheduler":
-        run_configs(args, scheduler_sweep_configs())
+        configs = scheduler_change_configs(use_early_stopping=False)
+        if es:
+            configs += scheduler_change_configs(use_early_stopping=True)
+        run_configs(args, configs)
+
+    elif args.mode == "early_stopping":
+        run_configs(args, early_stopping_configs())
+
     elif args.mode == "all":
-        run_configs(
-            args,
-            aug_reg_pipeline_configs()
-            + optimizer_sweep_configs()
-            + scheduler_sweep_configs(),
+        configs = (
+            aug_reg_pipeline_configs(use_early_stopping=False)
+            + optimizer_change_configs(use_early_stopping=False)
+            + scheduler_change_configs(use_early_stopping=False)
         )
-
-
+        if es:
+            configs += (
+                aug_reg_pipeline_configs(use_early_stopping=True)
+                + optimizer_change_configs(use_early_stopping=True)
+                + scheduler_change_configs(use_early_stopping=True)
+            )
+        configs += early_stopping_configs()
+        run_configs(args, configs)
