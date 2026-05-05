@@ -1,0 +1,14 @@
+metric,value
+test_loss,0.5725510493863987
+accuracy,0.8136
+per_class_accuracy,0.8135999999999999
+accuracy_plane,0.85
+accuracy_car,0.901
+accuracy_bird,0.77
+accuracy_cat,0.638
+accuracy_deer,0.797
+accuracy_dog,0.707
+accuracy_frog,0.862
+accuracy_horse,0.846
+accuracy_ship,0.904
+accuracy_truck,0.861

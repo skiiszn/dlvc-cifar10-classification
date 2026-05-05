@@ -73,8 +73,8 @@ def test(args):
     # save results
     results_dir = Path("results/test_data")
     results_dir.mkdir(parents=True, exist_ok=True)
-    model_stem = Path(args.path_to_trained_model).stem
-    csv_path = results_dir / f"ResNet18_{model_stem}_test_results.csv"  # change for mutiple testing !!!
+    tag = Path(args.path_to_trained_model).parent.name
+    csv_path = results_dir / f"ResNet18_{tag}_test_results.csv"  # change for mutiple testing !!!
 
     mean_pcacc = test_metric.per_class_accuracy()
     overall_acc = test_metric.accuracy()
@@ -105,11 +105,16 @@ if __name__ == "__main__":
         "-d", "--gpu_id", default="5", type=str, help="index of which GPU to use"
     )
     args.add_argument("--batch_size", default=128, type=int, help="batch size")
+    args.add_argument(
+        "--path_to_trained_model",
+        type=str,
+        default=str(MODEL_SAVE_DIR / "ResNet18_noaug_noreg_adamw_exp" / "best_model_best.pth"),
+        help="Path to trained model checkpoint"
+    )
 
     if not isinstance(args, tuple):
         args = args.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.gpu_id = 0
-    args.path_to_trained_model = str(MODEL_SAVE_DIR / "resnet18" / "best_model_best.pth")
 
     test(args)
