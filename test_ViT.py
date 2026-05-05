@@ -110,7 +110,7 @@ if __name__ == "__main__":
     args.add_argument(
         "--path_to_trained_model",
         type=str,
-        default=str(MODEL_SAVE_DIR / "noaug_noreg_adamw_cos" / "best_model_best.pth"),
+        default=str(MODEL_SAVE_DIR / "checkpoints_ViT" /"noaug_noreg_adamw_cos" / "best_model_best.pth"), #change model:noaug_noreg_adamw_cos if needed
         help="Path to trained model checkpoint"
     )
 
