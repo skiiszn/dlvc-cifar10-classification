@@ -135,29 +135,11 @@ class HistoryTrackingTrainer(ImgClassificationTrainer):
         return loss, mAcc, mPCAcc
 
     def train(self) -> None:
-        """
-        Full training loop with optional early stopping.
-
-        When ``use_early_stopping=False`` (the baseline) the behaviour is
-        identical to ``ImgClassificationTrainer.train()``.
-
-        When ``use_early_stopping=True`` the loop checks val mPCAcc after
-        every validation epoch.  If it has not improved for ``patience``
-        consecutive validation checks, training is stopped and a summary
-        line is printed.
-
-        Note: the base trainer already saves the best model checkpoint
-        whenever val mPCAcc improves, so early stopping only avoids
-        unnecessary further epochs — the best model on disk is unaffected.
-        """
         if not self.use_early_stopping:
             # Delegate entirely to the base class — no overhead.
             super().train()
             return
 
-        # --- Early-stopping variant ---
-        # We re-implement the loop here rather than monkey-patching the base
-        # class so the logic stays readable and the base class is untouched.
         best_val_mPCAcc = -1.0
 
         for epoch_idx in range(self.num_epochs):
