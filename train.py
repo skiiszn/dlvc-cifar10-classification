@@ -429,7 +429,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         choices=["aug_reg", "optimizer", "scheduler", "early_stopping", "all"],
-        default="scheduler",
+        default="aug_reg",
         help=(
             "Which experiment to run:\n"
             "  'aug_reg'       = 4-combo aug/reg pipeline (AdamW + ExponentialLR);\n"
