@@ -276,7 +276,7 @@ def train(
     val_metric = Accuracy(classes=val_data.classes)
     val_frequency = 5
 
-    model_save_dir = Path(MODEL_SAVE_DIR) / tag
+    model_save_dir = Path(MODEL_SAVE_DIR) / "checkpoints_ViT" /tag
     model_save_dir.mkdir(parents=True, exist_ok=True)
 
     # different learning rate schedulers
