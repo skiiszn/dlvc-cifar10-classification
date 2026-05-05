@@ -108,7 +108,7 @@ if __name__ == "__main__":
     args.add_argument(
         "--path_to_trained_model",
         type=str,
-        default=str(MODEL_SAVE_DIR / "ResNet18_noaug_noreg_adamw_exp" / "best_model_best.pth"),
+        default=str(MODEL_SAVE_DIR / "ResNet18_noaug_noreg_adamw_exp" / "best_model_best.pth"), # change model:ResNet18_noaug_noreg_adamw_exp if needed!!!
         help="Path to trained model checkpoint"
     )
 
