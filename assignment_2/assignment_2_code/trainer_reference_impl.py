@@ -5,8 +5,10 @@ from abc import ABCMeta, abstractmethod
 from pathlib import Path
 from tqdm import tqdm
 
-from assignment_2_code.wandb_logger import WandBLogger
-from assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
+#from assignment_2_code.wandb_logger import WandBLogger
+#from assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
+from assignment_2.assignment_2_code.wandb_logger import WandBLogger
+from assignment_2.assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
 
 class BaseTrainer(metaclass=ABCMeta):
     '''
