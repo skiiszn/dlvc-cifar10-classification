@@ -103,7 +103,8 @@ class ImgSemSegTrainer(BaseTrainer):
         # OxfordIIITPet labels are (1, 2, 3) so we need to subtract 1 to get 0-based
         # class indices for CrossEntropyLoss.
         # Cityscapes labels are already 0-based (with 255 as the ignore label).
-        self.subtract_one = isinstance(train_data, OxfordPetsCustom)
+        self.subtract_one = "OxfordIIITPet" in {c.__name__ for c in type(train_data).__mro__}
+        #self.subtract_one = isinstance(train_data, OxfordPetsCustom)
 
         # make sure the checkpoint directory exists
         self.training_save_dir.mkdir(parents=True, exist_ok=True)
@@ -187,7 +188,7 @@ class ImgSemSegTrainer(BaseTrainer):
         epoch_mIoU = self.train_metric.mIoU()
 
         # print results
-        print(f"______epoch {epoch_idx}\n")
+        print(f"\n______epoch {epoch_idx}\n")
         print("[train]")
         print(f"loss: {epoch_loss}")
         print(self.train_metric)

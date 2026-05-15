@@ -1,17 +1,130 @@
 
 import argparse
 import os
+import csv
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as v2
 from pathlib import Path
+from typing import Tuple
+import matplotlib.pyplot as plt
+
 from torchvision.models.segmentation import fcn_resnet50
 from torchvision.models import ResNet50_Weights
 
-from assignment_2_code.models.segment_model import DeepSegmenter
-from assignment_2_code.dataset.oxfordpets import  OxfordPetsCustom
-from assignment_2_code.metrics import SegMetrics
-from assignment_2_code.trainer import ImgSemSegTrainer
+from assignment_2.assignment_2_code.models.segment_model import DeepSegmenter
+from assignment_2.assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
+from assignment_2.assignment_2_code.metrics import SegMetrics
+from assignment_2.assignment_2_code.trainer import ImgSemSegTrainer
+
+from config import OXFORD_PETS_DIR, MODEL_SAVE_DIR, LOG_DIR
+
+
+class HistoryTrackingTrainer(ImgSemSegTrainer):
+    """
+    Wraps ``ImgSemSegTrainer`` to record every (epoch, loss, mIoU) tuple
+    produced by ``_train_epoch`` / ``_val_epoch``.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.train_history = {"epoch": [], "loss": [], "mIoU": []}
+        self.val_history = {"epoch": [], "loss": [], "mIoU": []}
+
+    def _train_epoch(self, epoch_idx: int) -> Tuple[float, float]:
+        loss, mIoU = super()._train_epoch(epoch_idx)
+        self.train_history["epoch"].append(epoch_idx)
+        self.train_history["loss"].append(float(loss))
+        self.train_history["mIoU"].append(float(mIoU))
+        return loss, mIoU
+
+    def _val_epoch(self, epoch_idx: int) -> Tuple[float, float]:
+        loss, mIoU = super()._val_epoch(epoch_idx)
+        self.val_history["epoch"].append(epoch_idx)
+        self.val_history["loss"].append(float(loss))
+        self.val_history["mIoU"].append(float(mIoU))
+        return loss, mIoU
+
+
+def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
+
+    history_dir = Path(LOG_DIR) / "train_metrics_data" / tag
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = history_dir / "history.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["phase", "epoch", "loss", "mIoU"])
+        for i in range(len(trainer.train_history["epoch"])):
+            writer.writerow([
+                "train",
+                trainer.train_history["epoch"][i],
+                trainer.train_history["loss"][i],
+                trainer.train_history["mIoU"][i],
+            ])
+        for i in range(len(trainer.val_history["epoch"])):
+            writer.writerow([
+                "val",
+                trainer.val_history["epoch"][i],
+                trainer.val_history["loss"][i],
+                trainer.val_history["mIoU"][i],
+            ])
+    print(f"Saved per-epoch metrics to {csv_path}")
+
+    viz_path = Path(LOG_DIR) / "viz" / tag / "training_metrics_curves.png"
+    fig = _plot_run_curves(
+        train_history=trainer.train_history,
+        val_history=trainer.val_history,
+        save_path=viz_path,
+        label=tag,
+    )
+    plt.close(fig)
+    print(f"Saved training curves to {viz_path}")
+
+
+def _plot_run_curves(train_history: dict, val_history: dict,
+                     save_path: Path, label: str):
+    """
+    Render a 2x2 viz (val/loss, val/mIoU, train/loss, train/mIoU) for a
+    single run. Combining multiple runs into one comparison figure (as in
+    image_FCN.png) is left for a separate plotting script that reads the CSVs.
+    """
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    (ax_vl, ax_vm), (ax_tl, ax_tm) = axes
+
+    ax_vl.plot(val_history["epoch"], val_history["loss"], marker="o", label=label)
+    ax_vl.set_title("val/loss");
+    ax_vl.set_xlabel("epoch");
+    ax_vl.set_ylabel("loss");
+    ax_vl.legend()
+
+    ax_vm.plot(val_history["epoch"], val_history["mIoU"], marker="o", label=label)
+    ax_vm.set_title("val/mIoU");
+    ax_vm.set_xlabel("epoch");
+    ax_vm.set_ylabel("mIoU");
+    ax_vm.legend()
+
+    ax_tl.plot(train_history["epoch"], train_history["loss"], marker="o", label=label)
+    ax_tl.set_title("train/loss");
+    ax_tl.set_xlabel("epoch");
+    ax_tl.set_ylabel("loss");
+    ax_tl.legend()
+
+    ax_tm.plot(train_history["epoch"], train_history["mIoU"], marker="o", label=label)
+    ax_tm.set_title("train/mIoU");
+    ax_tm.set_xlabel("epoch");
+    ax_tm.set_ylabel("mIoU");
+    ax_tm.legend()
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120)
+    return fig
+
+
+
 
 
 
@@ -33,14 +146,14 @@ def train(args):
                             v2.ToDtype(torch.long, scale=False),
                             v2.Resize(size=(64,64), interpolation=v2.InterpolationMode.NEAREST)])
 
-    train_data = OxfordPetsCustom(root="path_to_dataset", 
+    train_data = OxfordPetsCustom(root=str(OXFORD_PETS_DIR),
                             split="trainval",
                             target_types='segmentation', 
                             transform=train_transform,
                             target_transform=train_transform2,
                             download=True)
 
-    val_data = OxfordPetsCustom(root="path_to_dataset", 
+    val_data = OxfordPetsCustom(root=str(OXFORD_PETS_DIR),
                             split="test",
                             target_types='segmentation', 
                             transform=val_transform,
@@ -67,6 +180,9 @@ def train(args):
         aux_loss=False,
     )
 
+    tag = "fcn_pretrained" if args.pretrained else "fcn_scratch"
+    print(f"\nConfiguration: pretrained={args.pretrained}  (tag: {tag})")
+
     model = DeepSegmenter(fcn).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, amsgrad=True)
     loss_fn = nn.CrossEntropyLoss()
@@ -75,8 +191,7 @@ def train(args):
     val_metric = SegMetrics(classes=val_data.classes_seg)
     val_frequency = 2
 
-    model_save_dir = Path("saved_models")
-    model_save_dir.mkdir(exist_ok=True)
+    MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
     
@@ -90,14 +205,15 @@ def train(args):
                     val_data,
                     device,
                     args.num_epochs, 
-                    model_save_dir,
+                    MODEL_SAVE_DIR,
                     batch_size=64,
                     val_frequency = val_frequency)
     trainer.train()
+    _save_run_artifacts(trainer, tag)
 
     # see Reference implementation of ImgSemSegTrainer
     # just comment if not used
-    trainer.dispose() 
+    #trainer.dispose()
 
 if __name__ == "__main__":
     #args = argparse.ArgumentParser(description='Training')

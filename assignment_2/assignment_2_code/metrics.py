@@ -40,9 +40,17 @@ class SegMetrics(PerformanceMeasure):
     IGNORE_INDEX = 255
 
     def __init__(self, classes):
-        self.classes = classes
+        #self.classes = classes
+        #self.reset()
+
+        if isinstance(classes, int):
+            self.num_classes = classes
+        else:
+            self.num_classes = len(classes)
+        self.classes = classes  # original (handy for debugging / class names)
 
         self.reset()
+
 
     def reset(self) -> None:
         '''
@@ -51,7 +59,7 @@ class SegMetrics(PerformanceMeasure):
         # Confusion matrix: rows = ground-truth class, cols = predicted class.
         # CM[i, j] = number of pixels with true label i predicted as class j.
         self.confusion_matrix = torch.zeros(
-            (self.classes, self.classes), dtype=torch.int64
+            (self.num_classes, self.num_classes), dtype=torch.int64
         )
 
 
@@ -85,9 +93,9 @@ class SegMetrics(PerformanceMeasure):
             )
 
         b, c, h, w = prediction.shape
-        if c != self.classes:
+        if c != self.num_classes:
             raise ValueError(
-                f"prediction has {c} classes in dim=1, expected {self.classes}"
+                f"prediction has {c} classes in dim=1, expected {self.num_classes}"
             )
         if tuple(target.shape) != (b, h, w):
             raise ValueError(
@@ -103,10 +111,10 @@ class SegMetrics(PerformanceMeasure):
             valid_targets = target_long[valid_mask]
             tmin = int(valid_targets.min().item())
             tmax = int(valid_targets.max().item())
-            if tmin < 0 or tmax >= self.classes:
+            if tmin < 0 or tmax >= self.num_classes:
                 raise ValueError(
                     f"target values (excluding the ignore label {self.IGNORE_INDEX}) "
-                    f"must be in [0, {self.classes - 1}], got min={tmin}, max={tmax}"
+                    f"must be in [0, {self.num_classes - 1}], got min={tmin}, max={tmax}"
                 )
         else:
             # Every pixel is ignored — nothing to accumulate.
@@ -122,10 +130,10 @@ class SegMetrics(PerformanceMeasure):
 
         # bincount trick: encode (true, pred) as a single index
         # index = true * C + pred  ->  reshape to (C, C)
-        idx = t_flat * self.classes + p_flat
+        idx = t_flat * self.num_classes + p_flat
         cm_update = torch.bincount(
-            idx, minlength=self.classes * self.classes
-        ).reshape(self.classes, self.classes)
+            idx, minlength=self.num_classes * self.num_classes
+        ).reshape(self.num_classes, self.num_classes)
 
         self.confusion_matrix += cm_update.to(self.confusion_matrix.device).to(
             self.confusion_matrix.dtype
