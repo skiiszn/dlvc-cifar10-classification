@@ -17,7 +17,7 @@ from assignment_2.assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
 from assignment_2.assignment_2_code.metrics import SegMetrics
 from assignment_2.assignment_2_code.trainer import ImgSemSegTrainer
 
-from config import OXFORD_PETS_DIR, MODEL_SAVE_DIR, LOG_DIR
+from config import OXFORD_PETS_DIR, MODEL_SAVE_DIR, VIZ_DIR
 
 
 class HistoryTrackingTrainer(ImgSemSegTrainer):
@@ -48,7 +48,7 @@ class HistoryTrackingTrainer(ImgSemSegTrainer):
 
 def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
 
-    history_dir = Path(LOG_DIR) / "train_metrics_data" / tag
+    history_dir = Path(VIZ_DIR) / "train_metrics_data" / tag
     history_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = history_dir / "history.csv"
@@ -71,7 +71,7 @@ def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
             ])
     print(f"Saved per-epoch metrics to {csv_path}")
 
-    viz_path = Path(LOG_DIR) / "viz" / tag / "training_metrics_curves.png"
+    viz_path = Path(VIZ_DIR) / "viz" / tag / "training_metrics_curves.png"
     fig = _plot_run_curves(
         train_history=trainer.train_history,
         val_history=trainer.val_history,
