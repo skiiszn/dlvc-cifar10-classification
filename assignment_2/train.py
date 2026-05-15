@@ -191,11 +191,12 @@ def train(args):
     val_metric = SegMetrics(classes=val_data.classes_seg)
     val_frequency = 2
 
-    MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    model_save_dir = Path(MODEL_SAVE_DIR) / tag
+    model_save_dir.mkdir(parents=True, exist_ok=True)
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
     
-    trainer = ImgSemSegTrainer(model, 
+    trainer = HistoryTrackingTrainer(model,
                     optimizer,
                     loss_fn,
                     lr_scheduler,
