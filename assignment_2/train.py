@@ -46,8 +46,60 @@ class HistoryTrackingTrainer(ImgSemSegTrainer):
         return loss, mIoU
 
 
-def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
 
+_RUN_STYLE = {
+    "fcn_pretrained": {"label": "FCN",              "color": "purple"},  # purple
+    "fcn_scratch":    {"label": "FCN_from-scratch", "color": "green"},  # green
+}
+
+
+def plot_training_curves(runs: list, save_path) -> None:
+    """
+    Create a 2x2 training-curves visualization.
+    Args:
+        runs: list of run dicts, each with keys
+              "tag", "train_history", "val_history".
+              Pass a single-element list for an individual plot, or
+              multiple elements to overlay them in one comparison figure.
+    """
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+
+    # (axis, panel title, phase, metric key) — order matches image_FCN.png.
+    panels = [
+        (axes[0, 0], "val/loss", "val_history", "loss"),
+        (axes[0, 1], "val/mIoU", "val_history", "mIoU"),
+        (axes[1, 0], "train/mIoU", "train_history", "mIoU"),
+        (axes[1, 1], "train/loss", "train_history", "loss"),
+    ]
+
+    for ax, title, phase_key, metric in panels:
+        for run in runs:
+            style = _RUN_STYLE.get(
+                run["tag"], {"label": run["tag"], "color": None}
+            )
+            hist = run[phase_key]
+            ax.plot(
+                hist["epoch"], hist[metric],
+                color=style["color"], linewidth=2.0, label=style["label"],
+            )
+        ax.set_title(title, fontweight="bold")
+        ax.set_xlabel("Step")
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper center", ncol=len(runs), frameon=False)
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved training curves to {save_path}")
+
+
+def _save_history_csv(run: dict) -> None:
+    """Persist one run's per-epoch history to CSV."""
+    tag = run["tag"]
     history_dir = Path(VIZ_DIR) / "train_metrics_data" / tag
     history_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,80 +107,34 @@ def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> None:
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["phase", "epoch", "loss", "mIoU"])
-        for i in range(len(trainer.train_history["epoch"])):
-            writer.writerow([
-                "train",
-                trainer.train_history["epoch"][i],
-                trainer.train_history["loss"][i],
-                trainer.train_history["mIoU"][i],
-            ])
-        for i in range(len(trainer.val_history["epoch"])):
-            writer.writerow([
-                "val",
-                trainer.val_history["epoch"][i],
-                trainer.val_history["loss"][i],
-                trainer.val_history["mIoU"][i],
-            ])
+        for phase, key in (("train", "train_history"), ("val", "val_history")):
+            hist = run[key]
+            for i in range(len(hist["epoch"])):
+                writer.writerow([
+                    phase, hist["epoch"][i], hist["loss"][i], hist["mIoU"][i],
+                ])
     print(f"Saved per-epoch metrics to {csv_path}")
 
+
+def _save_run_artifacts(trainer: HistoryTrackingTrainer, tag: str) -> dict:
+    run = {
+        "tag": tag,
+        "train_history": trainer.train_history,
+        "val_history": trainer.val_history,
+    }
+    _save_history_csv(run)
+
     viz_path = Path(VIZ_DIR) / "viz" / tag / "training_metrics_curves.png"
-    fig = _plot_run_curves(
-        train_history=trainer.train_history,
-        val_history=trainer.val_history,
-        save_path=viz_path,
-        label=tag,
-    )
-    plt.close(fig)
-    print(f"Saved training curves to {viz_path}")
-
-
-def _plot_run_curves(train_history: dict, val_history: dict,
-                     save_path: Path, label: str):
-    """
-    Render a 2x2 viz (val/loss, val/mIoU, train/loss, train/mIoU) for a
-    single run. Combining multiple runs into one comparison figure (as in
-    image_FCN.png) is left for a separate plotting script that reads the CSVs.
-    """
-    save_path = Path(save_path)
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-    (ax_vl, ax_vm), (ax_tl, ax_tm) = axes
-
-    ax_vl.plot(val_history["epoch"], val_history["loss"], marker="o", label=label)
-    ax_vl.set_title("val/loss");
-    ax_vl.set_xlabel("epoch");
-    ax_vl.set_ylabel("loss");
-    ax_vl.legend()
-
-    ax_vm.plot(val_history["epoch"], val_history["mIoU"], marker="o", label=label)
-    ax_vm.set_title("val/mIoU");
-    ax_vm.set_xlabel("epoch");
-    ax_vm.set_ylabel("mIoU");
-    ax_vm.legend()
-
-    ax_tl.plot(train_history["epoch"], train_history["loss"], marker="o", label=label)
-    ax_tl.set_title("train/loss");
-    ax_tl.set_xlabel("epoch");
-    ax_tl.set_ylabel("loss");
-    ax_tl.legend()
-
-    ax_tm.plot(train_history["epoch"], train_history["mIoU"], marker="o", label=label)
-    ax_tm.set_title("train/mIoU");
-    ax_tm.set_xlabel("epoch");
-    ax_tm.set_ylabel("mIoU");
-    ax_tm.legend()
-
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=120)
-    return fig
+    plot_training_curves([run], viz_path)
+    return run
 
 
 
 
 
 
-def train(args):
+
+def train(args, pretrained: bool):
 
     train_transform = v2.Compose([v2.ToImage(), 
                             v2.ToDtype(torch.float32, scale=True),
@@ -165,12 +171,10 @@ def train(args):
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-    num_classes = len(train_data.classes_seg)  # pet, background, border -> 3
+    num_classes = len(train_data.classes_seg)
 
-    # Pre-trained backbone (Part 4, second run) vs. fully from scratch (first run).
-    # We do NOT use `weights=...` because the prediction head has a different
-    # number of output classes than the dataset the FCN was pretrained on.
-    backbone_weights = ResNet50_Weights.IMAGENET1K_V1 if args.pretrained else None
+    # Pre-trained backbone (second run) vs. from scratch (first run).
+    backbone_weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
 
 
     fcn = fcn_resnet50(
@@ -180,8 +184,8 @@ def train(args):
         aux_loss=False,
     )
 
-    tag = "fcn_pretrained" if args.pretrained else "fcn_scratch"
-    print(f"\nConfiguration: pretrained={args.pretrained}  (tag: {tag})")
+    tag = "FCN_pretrained" if pretrained else "FCN_from_scratch"
+    print(f"\nConfiguration: pretrained={pretrained}  (tag: {tag})")
 
     model = DeepSegmenter(fcn).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, amsgrad=True)
@@ -206,15 +210,19 @@ def train(args):
                     val_data,
                     device,
                     args.num_epochs, 
-                    MODEL_SAVE_DIR,
+                    model_save_dir,
                     batch_size=64,
                     val_frequency = val_frequency)
+
     trainer.train()
-    _save_run_artifacts(trainer, tag)
+
+    run = _save_run_artifacts(trainer, tag)
 
     # see Reference implementation of ImgSemSegTrainer
     # just comment if not used
     #trainer.dispose()
+
+    return run
 
 if __name__ == "__main__":
     #args = argparse.ArgumentParser(description='Training')
@@ -223,8 +231,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Training')
     parser.add_argument('-d', '--gpu_id', default='0', type=str,
                         help='index of which GPU to use')
-    parser.add_argument('--pretrained', action='store_true',
-                        help='Use ImageNet-pretrained ResNet50 backbone')
+    #parser.add_argument('--pretrained', action='store_true',
+    #                    help='Use ImageNet-pretrained ResNet50 backbone')
+    parser.add_argument('--mode', choices=['scratch', 'pretrained', 'both'],
+                        default='both',
+                        help="which run(s) to do: 'scratch', 'pretrained', "
+                             "or 'both' (scratch first, then pretrained) ---"
+                             "Use ImageNet-pretrained ResNet50 backbone")
     
     #if not isinstance(args, tuple):
     #    args = args.parse_args()
@@ -233,5 +246,17 @@ if __name__ == "__main__":
     args.gpu_id = 0
     args.num_epochs = 31
 
+    if args.mode == 'scratch':
+        runs = [False]
+    elif args.mode == 'pretrained':
+        runs = [True]
+    else:  # 'both'
+        runs = [False, True]
 
-    train(args)
+    completed_runs = []
+    for pretrained in runs:
+        completed_runs.append(train(args, pretrained=pretrained))
+
+    if len(completed_runs) > 1:
+        combined_path = Path(VIZ_DIR) / "viz" / "fcn_comparison.png"
+        plot_training_curves(completed_runs, combined_path)
