@@ -12,10 +12,10 @@ import matplotlib.pyplot as plt
 from torchvision.models.segmentation import fcn_resnet50
 from torchvision.models import ResNet50_Weights
 
-from assignment_2.assignment_2_code.models.segment_model import DeepSegmenter
-from assignment_2.assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
-from assignment_2.assignment_2_code.metrics import SegMetrics
-from assignment_2.assignment_2_code.trainer import ImgSemSegTrainer
+from assignment_2_code.models.segment_model import DeepSegmenter
+from assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
+from assignment_2_code.metrics import SegMetrics
+from assignment_2_code.trainer import ImgSemSegTrainer
 
 from config import OXFORD_PETS_DIR, MODEL_SAVE_DIR, VIZ_DIR
 
