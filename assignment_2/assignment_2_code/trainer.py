@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 from assignment_2_code.dataset.oxfordpets import OxfordPetsCustom
 
-
 class BaseTrainer(metaclass=ABCMeta):
     '''
     Base class of all Trainers.
@@ -267,11 +266,13 @@ class ImgSemSegTrainer(BaseTrainer):
                     self.best_val_mIoU = val_mIoU
                     print(f" best mIoU: {val_mIoU}")
                     print(f" saving model to {self.training_save_dir}")
-                    self.model.save(self.training_save_dir, suffix="best")
+                    save_path = self.training_save_dir / "best.pth"
+                    torch.save(self.model.state_dict(), save_path)
 
                 # always save the last checkpoint at the end of training
                 if epoch_idx == self.num_epochs - 1:
-                    self.model.save(self.training_save_dir, suffix="last")
+                    save_path = self.training_save_dir / "best.pth"
+                    torch.save(self.model.state_dict(), save_path)
 
 
 
