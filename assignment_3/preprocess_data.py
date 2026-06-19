@@ -75,9 +75,7 @@ class BrainTumorDataPreprocessor:
     
     def run(self):
         """Run complete preprocessing pipeline"""
-        print("\n" + "="*80)
         print("BRAIN TUMOR DATA PREPROCESSING")
-        print("="*80 + "\n")
         
         # Step 1: Validate source structure
         print("Step 1: Validating source data structure...")
@@ -116,7 +114,6 @@ class BrainTumorDataPreprocessor:
 
         
         print(f"Output directory: {self.output_dir}")
-        print(f"\nReady for YOLO training!")
         
         return True
     
@@ -326,9 +323,7 @@ class BrainTumorDataPreprocessor:
     
     def _print_statistics(self):
         """Print detailed statistics"""
-        print("\n" + "="*80)
         print("DATA STATISTICS")
-        print("="*80 + "\n")
         
         # Per-split statistics
         for split in ['train', 'val', 'test']:
@@ -355,7 +350,6 @@ class BrainTumorDataPreprocessor:
         total_all = sum(sum(split_stats.values()) for split_stats in self.stats.values())
         
         print("\nOVERALL STATISTICS:")
-        print("-" * 40)
         print(f"Total images: {total_all}")
         print(f"  Train: {sum(self.stats['train'].values())}")
         print(f"  Val:   {sum(self.stats['val'].values())}")
@@ -377,7 +371,6 @@ class BrainTumorDataPreprocessor:
         # Error report
         if any(self.errors.values()):
             print("\n  ERROR REPORT:")
-            print("-" * 40)
             
             if self.errors['missing_images']:
                 print(f"Missing images: {len(self.errors['missing_images'])}")
@@ -446,8 +439,8 @@ def main():
     """Main execution"""
     
     # Define paths
-    source_dir = "/Users/aliciasofieschartmann/Documents/Master_Data_Science/2026S/DLVC/Assignment3/data"
-    
+    source_dir = "./data"
+
     # Create preprocessor
     preprocessor = BrainTumorDataPreprocessor(
         source_dir=source_dir,
@@ -459,15 +452,7 @@ def main():
     success = preprocessor.run()
     
     if success:
-        print("\n" + "="*80)
-        print("NEXT STEPS:")
-        print("="*80)
-        print("\n1. Update your config.yaml with:")
-        print(f"   DATASET_PATH: {preprocessor.output_dir}")
-        print(f"   DATA_YAML: {preprocessor.output_dir / 'data.yaml'}")
-        print("\n2. Run training with:")
-        print("   python train_models.py")
-        print("\n" + "="*80 + "\n")
+        print("\n Preprocessing succeeded!")
     else:
         print("\n Preprocessing failed!")
         return 1
