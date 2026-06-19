@@ -82,29 +82,29 @@ class BrainTumorDataPreprocessor:
         # Step 1: Validate source structure
         print("Step 1: Validating source data structure...")
         if not self._validate_source_structure():
-            print("❌ Source structure validation failed!")
+            print(" Source structure validation failed!")
             return False
-        print("✅ Source structure validated\n")
+        print(" Source structure validated\n")
         
         # Step 2: Create output directory structure
         print("Step 2: Creating output directory structure...")
         self._create_output_structure()
-        print("✅ Output directory structure created\n")
+        print(" Output directory structure created\n")
         
         # Step 3: Process training data
         print("Step 3: Processing training data...")
         train_files = self._process_split('Train', 'train', create_test=True)
-        print(f"✅ Training data processed\n")
+        print(f" Training data processed\n")
         
         # Step 4: Process validation data
         print("Step 4: Processing validation data...")
         self._process_split('Val', 'val', create_test=False)
-        print(f"✅ Validation data processed\n")
+        print(f" Validation data processed\n")
         
         # Step 5: Create data.yaml
         print("Step 5: Creating data.yaml configuration...")
         self._create_data_yaml()
-        print("✅ data.yaml created\n")
+        print(" data.yaml created\n")
         
         # Step 6: Print statistics
         print("Step 6: Generating statistics report...")
@@ -113,10 +113,8 @@ class BrainTumorDataPreprocessor:
         # Step 7: Validate output
         print("\nStep 7: Validating output structure...")
         self._validate_output_structure()
+
         
-        print("\n" + "="*80)
-        print("✅ PREPROCESSING COMPLETE!")
-        print("="*80 + "\n")
         print(f"Output directory: {self.output_dir}")
         print(f"\nReady for YOLO training!")
         
@@ -131,7 +129,7 @@ class BrainTumorDataPreprocessor:
         
         for path in expected_structures:
             if not path.exists():
-                print(f"❌ Missing: {path}")
+                print(f" Missing: {path}")
                 return False
         
         # Check for class folders
@@ -140,7 +138,7 @@ class BrainTumorDataPreprocessor:
             for class_name in self.class_names.keys():
                 class_dir = split_dir / class_name
                 if not class_dir.exists():
-                    print(f"❌ Missing class folder: {class_dir}")
+                    print(f" Missing class folder: {class_dir}")
                     return False
                 
                 # Check for images and labels subfolders
@@ -148,10 +146,10 @@ class BrainTumorDataPreprocessor:
                 labels_dir = class_dir / 'labels'
                 
                 if not images_dir.exists():
-                    print(f"❌ Missing images folder: {images_dir}")
+                    print(f" Missing images folder: {images_dir}")
                     return False
                 if not labels_dir.exists():
-                    print(f"❌ Missing labels folder: {labels_dir}")
+                    print(f" Missing labels folder: {labels_dir}")
                     return False
         
         return True
@@ -305,7 +303,7 @@ class BrainTumorDataPreprocessor:
                 })
             
             except Exception as e:
-                print(f"❌ Error copying files: {e}")
+                print(f" Error copying files: {e}")
                 continue
     
     def _create_data_yaml(self):
@@ -378,7 +376,7 @@ class BrainTumorDataPreprocessor:
         
         # Error report
         if any(self.errors.values()):
-            print("\n⚠️  ERROR REPORT:")
+            print("\n  ERROR REPORT:")
             print("-" * 40)
             
             if self.errors['missing_images']:
@@ -409,7 +407,7 @@ class BrainTumorDataPreprocessor:
                 if len(self.errors['invalid_labels']) > 3:
                     print(f"  ... and {len(self.errors['invalid_labels']) - 3} more")
         else:
-            print("\n✅ NO ERRORS - All data validated successfully!")
+            print("\n NO ERRORS - All data validated successfully!")
     
     def _validate_output_structure(self):
         """Validate the output structure"""
@@ -426,21 +424,21 @@ class BrainTumorDataPreprocessor:
         
         for dir_path in expected_dirs:
             if not dir_path.exists():
-                print(f"❌ Missing: {dir_path}")
+                print(f" Missing: {dir_path}")
                 return False
             
             # Check that directory is not empty
             files = list(dir_path.glob('*'))
             if not files:
-                print(f"⚠️  Empty: {dir_path}")
+                print(f"  Empty: {dir_path}")
         
         # Check data.yaml exists
         yaml_path = self.output_dir / 'data.yaml'
         if not yaml_path.exists():
-            print(f"❌ Missing: {yaml_path}")
+            print(f" Missing: {yaml_path}")
             return False
         
-        print("✅ Output structure validated!")
+        print(" Output structure validated!")
         return True
 
 
@@ -471,7 +469,7 @@ def main():
         print("   python train_models.py")
         print("\n" + "="*80 + "\n")
     else:
-        print("\n❌ Preprocessing failed!")
+        print("\n Preprocessing failed!")
         return 1
     
     return 0
