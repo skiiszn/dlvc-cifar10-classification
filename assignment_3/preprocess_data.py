@@ -306,7 +306,7 @@ class BrainTumorDataPreprocessor:
     def _create_data_yaml(self):
         """Create data.yaml for YOLO"""
         data_yaml = {
-            'path': str(self.output_dir),
+            'path': '.',
             'train': 'images/train',
             'val': 'images/val',
             'test': 'images/test',
