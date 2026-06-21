@@ -341,7 +341,7 @@ class BrainTumorDataPreprocessor:
                 count = self.stats[split][class_name]
                 class_id = self.class_names[class_name]
                 percentage = (count / total_images * 100) if total_images > 0 else 0
-                bar = "█" * int(percentage / 2)
+                bar = "#" * int(percentage / 2)
                 print(f"  {class_name:12} ({class_id}): {count:5} ({percentage:5.1f}%) {bar}")
             
             print()

@@ -1,0 +1,10 @@
+path: C:/Users/andje/OneDrive/Desktop/dlvc/dlvc-cifar10-classification/processed
+train: images/train
+val: images/val
+test: images/test
+nc: 4
+names:
+  0: Glioma
+  1: Meningioma
+  2: NoTumor
+  3: Pituitary
