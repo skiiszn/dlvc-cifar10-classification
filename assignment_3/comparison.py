@@ -82,11 +82,11 @@ plt.rcParams.update({
 # helpers
 # ════════════════════════════════════════════════════════════════════════════
 def _find_best_weights(model_key: str, size: str) -> Path | None:
-    exact = CHECKPOINTS / model_key / f"{model_key}{size}" / "weights" / "best.pt"
-    if exact.exists():
-        return exact
+    """Pick the most recently modified best.pt — handles multiple run folders."""
     candidates = list((CHECKPOINTS / model_key).rglob("best.pt"))
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)[0]
 
 
 def _draw_boxes(ax, boxes_norm, img_w, img_h, linewidth=2):

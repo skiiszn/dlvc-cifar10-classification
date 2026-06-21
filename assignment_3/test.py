@@ -52,16 +52,15 @@ MODEL_REGISTRY = {
 
 def _find_best_weights(model_key: str, size: str) -> Path | None:
     """
-    Locate the best.pt saved by ultralytics under the checkpoints directory.
-    Searches checkpoints/<model_key>/<model_key><size>/weights/best.pt
-    and falls back to a glob if the exact path isn't found.
+    Locate best.pt under checkpoints/<model_key>/.
+    If multiple run folders exist (e.g. yolov8m, yolov8m-2), picks the
+    most recently modified one so the latest completed run is always used.
     """
-    exact = CHECKPOINTS / model_key / f"{model_key}{size}" / "weights" / "best.pt"
-    if exact.exists():
-        return exact
-
     candidates = list((CHECKPOINTS / model_key).rglob("best.pt"))
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+    # sort by modification time, newest first
+    return sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)[0]
 
 
 def test_model(model_key: str) -> dict:

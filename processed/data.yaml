@@ -1,4 +1,4 @@
-path: C:/Users/andje/OneDrive/Desktop/dlvc/dlvc-cifar10-classification/processed
+path: .
 train: images/train
 val: images/val
 test: images/test
