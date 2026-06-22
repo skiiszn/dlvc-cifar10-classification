@@ -141,7 +141,7 @@ class YOLOv11Trainer(BaseYOLOTrainer):
         print()
 
         # Train using model's built-in training
-        model_name = f'yolov11{self.model.model_size}'
+        model_name = f'yolo11{self.model.model_size}'
         results = self.model.train(
             data=self.data_yaml,
             epochs=epochs,

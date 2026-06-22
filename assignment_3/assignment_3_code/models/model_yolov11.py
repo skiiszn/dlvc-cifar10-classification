@@ -52,7 +52,7 @@ class YOLOv11:
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Load pretrained YOLOv11 model
-        model_name = f'yolov11{model_size}'
+        model_name = f'yolo11{model_size}'
         self.model = YOLO(f'{model_name}.pt')
         self.model.to(self.device)
         
