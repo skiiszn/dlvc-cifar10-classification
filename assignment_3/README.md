@@ -24,22 +24,23 @@ group_20/
 │   ├── images/train|val|test
 │   ├── labels/train|val|test
 │   └── data.yaml
-├── assignment_3/
-│    ├── preprocess_data.py
-│    ├── train.py
-│    ├── test.py
-│    ├── comparison.py
-│    ├── metrics.py
-│    ├── results/             <- generated outputs
-│    └── assignment_3_code/
-│        ├── models/
-│        │   ├── model_yolov5.py
-│        │   ├── model_yolov8.py
-│        │   └── model_yolov11.py
-│        ├── trainer_yolov5.py
-│        ├── trainer_yolov8.py
-│        └── trainer_yolov11.py
-└── report.pdf
+└── assignment_3/
+    ├── report.pdf
+    ├── preprocess_data.py
+    ├── train.py
+    ├── test.py
+    ├── comparison.py
+    ├── metrics.py
+    ├── results/             <- generated outputs
+    └── assignment_3_code/
+        ├── models/
+        │   ├── model_yolov5.py
+        │   ├── model_yolov8.py
+        │   └── model_yolov11.py
+        ├── trainer_yolov5.py
+        ├── trainer_yolov8.py
+        └── trainer_yolov11.py
+
 ```
 
 ---
