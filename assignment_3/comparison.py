@@ -22,66 +22,36 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 from PIL import Image
+from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
 CODE_DIR = BASE_DIR / "assignment_3_code"
 sys.path.insert(0, str(CODE_DIR))
 sys.path.insert(0, str(BASE_DIR))
 
-from models.model_yolov5 import YOLOv5
-from models.model_yolov8 import YOLOv8
-from models.model_yolov11 import YOLOv11
-
 # ── Paths ────────────────────────────────────────────────────────────────────
-PROCESSED   = BASE_DIR / "processed"
+PROCESSED   = BASE_DIR.parent / "processed" 
 CHECKPOINTS = BASE_DIR / "checkpoints"
 RESULTS_DIR = BASE_DIR / "results"
-
-YAML_PATH     = (BASE_DIR.parent / "processed" / "data.yaml").resolve()
-YAML_PATH_STR = YAML_PATH.as_posix()
-
-import contextlib
-import yaml as _yaml
-
-@contextlib.contextmanager
-def patched_yaml(yaml_path: Path):
-    """Temporarily write absolute path into data.yaml, restore original after."""
-    raw = yaml_path.read_text(encoding="utf-8")
-    data = _yaml.safe_load(raw)
-    data["path"] = str(yaml_path.parent.resolve()).replace("\\", "/")
-    yaml_path.write_text(_yaml.dump(data, sort_keys=False), encoding="utf-8")
-    try:
-        yield
-    finally:
-        yaml_path.write_text(raw, encoding="utf-8")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 CLASS_NAMES  = {0: "Glioma", 1: "Meningioma", 2: "NoTumor", 3: "Pituitary"}
 CLASS_COLORS = {0: "#e74c3c", 1: "#3498db",   2: "#2ecc71", 3: "#f39c12"}
 
 MODEL_REGISTRY = {
-    "yolov5":  {"cls": YOLOv5,  "size": "m", "label": "YOLOv5m",  "color": "#1f77b4"},
-    "yolov8":  {"cls": YOLOv8,  "size": "m", "label": "YOLOv8m",  "color": "#ff7f0e"},
-    "yolov11": {"cls": YOLOv11, "size": "m", "label": "YOLOv11m", "color": "#2ca02c"},
+    "yolov5":  {"label": "YOLOv5m",  "color": "#1f77b4"},
+    "yolov8":  {"label": "YOLOv8m",  "color": "#ff7f0e"},
+    "yolov11": {"label": "YOLOv11m", "color": "#2ca02c"},
 }
 
-# ── Shared plot style ────────────────────────────────────────────────────────
 plt.rcParams.update({
-    "figure.facecolor": "white",
-    "axes.facecolor":   "white",
-    "axes.grid":        True,
-    "grid.color":       "#cccccc",
-    "grid.linewidth":   0.6,
-    "axes.spines.top":  False,
-    "axes.spines.right":False,
-    "font.size":        11,
+    "figure.facecolor": "white", "axes.facecolor": "white",
+    "axes.grid": True, "grid.color": "#cccccc", "grid.linewidth": 0.6,
+    "axes.spines.top": False, "axes.spines.right": False, "font.size": 11,
 })
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# helpers
-# ════════════════════════════════════════════════════════════════════════════
-def _find_best_weights(model_key: str, size: str) -> Path | None:
+def _find_best_weights(model_key: str) -> Path | None:
     """Pick the most recently modified best.pt — handles multiple run folders."""
     candidates = list((CHECKPOINTS / model_key).rglob("best.pt"))
     if not candidates:
@@ -106,34 +76,26 @@ def _draw_boxes(ax, boxes_norm, img_w, img_h, linewidth=2):
                           facecolor=color, alpha=0.85, linewidth=0))
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# 1 — predictions.png  (Input Image | Ground Truth | Prediction)
-# ════════════════════════════════════════════════════════════════════════════
 def visualize_predictions(model_key: str, num_samples: int = 4,
                            conf: float = 0.25) -> None:
-    """
-    For one model: sample num_samples test images, run inference via
-    partner's model.detect(), and save a figure of rows:
-        col 0: Input Image
-        col 1: Ground Truth boxes (from label .txt files)
-        col 2: Model Prediction boxes + confidence
-    """
-    cfg     = MODEL_REGISTRY[model_key]
-    weights = _find_best_weights(model_key, cfg["size"])
-
+    weights = _find_best_weights(model_key)
     if weights is None:
-        print(f"[skip] {cfg['label']}: no best.pt found.")
+        print(f"[skip] {model_key}: no best.pt found.")
         return
 
-    print(f"\nGenerating predictions — {cfg['label']} ...")
-    model = cfg["cls"](model_size=cfg["size"])
-    model.load(weights)
+    print(f"\nGenerating predictions — {MODEL_REGISTRY[model_key]['label']} ...")
+
+    # Use ultralytics YOLO directly — avoids issues with the detect() wrapper
+    model = YOLO(str(weights))
 
     test_img_dir = PROCESSED / "images" / "test"
     label_dir    = PROCESSED / "labels"  / "test"
     exts         = {".jpg", ".jpeg", ".png", ".bmp"}
     all_imgs     = [f for f in test_img_dir.glob("*") if f.suffix.lower() in exts]
     sample       = random.sample(all_imgs, min(num_samples, len(all_imgs)))
+
+    # Run inference on all samples at once
+    results = model.predict(source=sample, imgsz=640, conf=conf, verbose=False)
 
     fig, axes = plt.subplots(num_samples, 3,
                              figsize=(12, 4 * num_samples),
@@ -143,7 +105,7 @@ def visualize_predictions(model_key: str, num_samples: int = 4,
 
     col_titles = ["Input Image", "Ground Truth", "Prediction"]
 
-    for row, img_path in enumerate(sample):
+    for row, (img_path, result) in enumerate(zip(sample, results)):
         img  = Image.open(img_path).convert("RGB")
         w, h = img.size
 
@@ -167,29 +129,26 @@ def visualize_predictions(model_key: str, num_samples: int = 4,
                         gt_boxes.append([int(parts[0])] + list(map(float, parts[1:])))
             _draw_boxes(axes[row, 1], gt_boxes, w, h)
 
+        # col 2 — model predictions via ultralytics result object
         axes[row, 2].imshow(img)
         axes[row, 2].axis("off")
-        with patched_yaml(YAML_PATH):
-            detection = model.detect(str(img_path), conf=conf)
-
-        if detection["boxes"] is not None and len(detection["boxes"]) > 0:
+        if result.boxes is not None and len(result.boxes):
             pred_boxes = []
-            for box, score, cls_id in zip(detection["boxes"],
-                                           detection["confidences"],
-                                           detection["class_ids"]):
-                x1, y1, x2, y2 = box
+            for box in result.boxes:
+                cls_id = int(box.cls[0])
+                conf_v = float(box.conf[0])
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
                 xc = (x1 + x2) / 2 / w
                 yc = (y1 + y2) / 2 / h
                 bw = (x2 - x1) / w
                 bh = (y2 - y1) / h
-                pred_boxes.append([int(cls_id), xc, yc, bw, bh])
-                # confidence label
+                pred_boxes.append([cls_id, xc, yc, bw, bh])
                 axes[row, 2].text(
                     x1, y1 - 5,
-                    f"{CLASS_NAMES[int(cls_id)]} {float(score):.2f}",
+                    f"{CLASS_NAMES[cls_id]} {conf_v:.2f}",
                     color="white", fontsize=8, fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2",
-                              facecolor=CLASS_COLORS[int(cls_id)],
+                              facecolor=CLASS_COLORS[cls_id],
                               alpha=0.85, linewidth=0)
                 )
             _draw_boxes(axes[row, 2], pred_boxes, w, h)
@@ -199,7 +158,6 @@ def visualize_predictions(model_key: str, num_samples: int = 4,
                               transform=axes[row, 2].transAxes,
                               color="red", fontsize=10)
 
-    # class colour legend at bottoms
     legend_handles = [
         mpatches.Patch(facecolor=CLASS_COLORS[i], label=CLASS_NAMES[i])
         for i in CLASS_NAMES
@@ -215,12 +173,7 @@ def visualize_predictions(model_key: str, num_samples: int = 4,
     print(f"[saved] {out_path}")
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# 2 — final_comparison_plot.png
-#     Single plot, one line per model, markers, legend bottom-right
-# ════════════════════════════════════════════════════════════════════════════
 def _load_history(model_key: str) -> dict | None:
-    """Load the history CSV saved by train.py."""
     csv_path = RESULTS_DIR / "train_metrics_data" / model_key / "history.csv"
     if not csv_path.exists():
         print(f"[skip] {model_key}: history CSV not found at {csv_path}")
@@ -240,26 +193,18 @@ def _load_history(model_key: str) -> dict | None:
 
 
 def plot_final_comparison() -> None:
-    """
-    Single-panel val mAP@50 comparison across all three models.
-        - one line per model, distinct colour, markers on every point
-        - descriptive title, legend lower-right inside plot
-    """
     runs = [_load_history(k) for k in MODEL_REGISTRY]
     runs = [r for r in runs if r is not None]
     if not runs:
-        print("[skip] No history CSVs found run train.py first.")
+        print("[skip] No history CSVs found — run train.py --rebuild first.")
         return
 
     fig, ax = plt.subplots(figsize=(11, 6))
-
     for run in runs:
         vh = run["val_history"]
-        ax.plot(
-            vh["epoch"], vh["mAP50"],
-            color=run["color"], linewidth=2, marker="o", markersize=5,
-            label=run["label"],
-        )
+        ax.plot(vh["epoch"], vh["mAP50"],
+                color=run["color"], linewidth=2, marker="o", markersize=5,
+                label=run["label"])
 
     ax.set_title("YOLO Model Comparison — Validation mAP@50",
                  fontsize=13, fontweight="bold")
@@ -275,23 +220,15 @@ def plot_final_comparison() -> None:
     print(f"[saved] {out_path}")
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# Main
-# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Assignment 3 — predictions & comparison")
-    parser.add_argument(
-        "--model", default="all",
-        choices=list(MODEL_REGISTRY.keys()) + ["all"],
-        help="Which model to generate predictions for.",
-    )
+    parser.add_argument("--model", default="all",
+                        choices=list(MODEL_REGISTRY.keys()) + ["all"])
     parser.add_argument("--num_samples", default=4,    type=int)
     parser.add_argument("--conf",        default=0.25, type=float)
     args = parser.parse_args()
 
     keys = list(MODEL_REGISTRY.keys()) if args.model == "all" else [args.model]
-
     for key in keys:
         visualize_predictions(key, num_samples=args.num_samples, conf=args.conf)
-
     plot_final_comparison()

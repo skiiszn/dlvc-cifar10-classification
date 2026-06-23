@@ -31,7 +31,6 @@ CHECKPOINTS = BASE_DIR / "checkpoints"
 RESULTS_DIR = BASE_DIR / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Resolve data.yaml always absolute so ultralytics can find it
 YAML_PATH     = (BASE_DIR.parent / "processed" / "data.yaml").resolve()
 YAML_PATH_STR = YAML_PATH.as_posix()
 
@@ -128,6 +127,27 @@ def _save_run_artifacts(run: dict) -> None:
     plot_training_curves([run], RESULTS_DIR / "viz" / run["tag"] / "training_curves.png")
 
 
+def rebuild_history_from_csv(model_key: str) -> dict:
+    """
+    Re-parse YOLO's results.csv and overwrite the history CSV.
+    Useful when training was interrupted and history is incomplete.
+    Picks the most recently modified results.csv.
+    """
+    cfg = MODEL_REGISTRY[model_key]
+    save_dir = CHECKPOINTS / model_key
+    candidates = list(save_dir.rglob("results.csv"))
+    if not candidates:
+        print(f"[skip] No results.csv found for {model_key}")
+        return {}
+    results_csv = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+    print(f"Rebuilding history for {model_key} from {results_csv}")
+    train_hist, val_hist = _parse_results_csv(results_csv)
+    run = {"tag": model_key, "label": cfg["label"], "color": cfg["color"],
+           "train_history": train_hist, "val_history": val_hist}
+    _save_run_artifacts(run)
+    return run
+
+
 def train_model(model_key: str, num_epochs: int, batch_size: int) -> dict:
     cfg = MODEL_REGISTRY[model_key]
     print(f"\n{'='*60}\n  Training {cfg['label']}  ({num_epochs} epochs, batch={batch_size})\n{'='*60}")
@@ -139,12 +159,11 @@ def train_model(model_key: str, num_epochs: int, batch_size: int) -> dict:
     with patched_yaml(YAML_PATH):
         trainer.train(epochs=num_epochs, batch_size=batch_size, workers=0)
 
-    # find results.csv (YOLO writes it inside the run folder)
     candidates = list(save_dir.rglob("results.csv"))
     if not candidates:
         print(f"[warn] results.csv not found for {model_key}, skipping history.")
         return {}
-    results_csv = candidates[0]
+    results_csv = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)[0]
 
     train_hist, val_hist = _parse_results_csv(results_csv)
     run = {"tag": model_key, "label": cfg["label"], "color": cfg["color"],
@@ -159,9 +178,22 @@ if __name__ == "__main__":
                         choices=list(MODEL_REGISTRY.keys()) + ["all"])
     parser.add_argument("--epochs", default=100, type=int)
     parser.add_argument("--batch",  default=16,  type=int)
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Rebuild history CSVs from existing results.csv without retraining")
     args = parser.parse_args()
 
     keys = list(MODEL_REGISTRY.keys()) if args.model == "all" else [args.model]
+
+    if args.rebuild:
+        completed_runs = []
+        for key in keys:
+            run = rebuild_history_from_csv(key)
+            if run:
+                completed_runs.append(run)
+        if len(completed_runs) > 1:
+            plot_training_curves(completed_runs, RESULTS_DIR / "viz" / "model_comparison.png")
+        exit(0)
+
     completed_runs = []
     for key in keys:
         run = train_model(key, num_epochs=args.epochs, batch_size=args.batch)
